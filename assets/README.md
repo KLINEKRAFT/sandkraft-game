@@ -51,3 +51,17 @@ The importer prints what it detected. Overrides:
 --tris=6000             body triangle budget
 --dry                   report the fit without writing
 ```
+
+## What is in here now
+
+`bronco_engine.glb` — the car currently in the game. Built in Blender from
+Meshy's "low poly 2026 Ford Bronco" output, which was not directly usable
+(3.1 M triangles, no materials, wheels welded to the body). Two nodes, `Body`
+(5,399 tris) and `Wheel` (500 tris, origin on its own axle), `COLOR_0` vertex
+colours instead of textures, authored directly in the engine's body space.
+
+Imported with:
+
+```
+node tools/import-model.mjs assets/bronco_engine.glb --as-is --track=1.64
+```

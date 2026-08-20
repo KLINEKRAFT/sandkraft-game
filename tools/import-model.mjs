@@ -44,11 +44,18 @@ const remap = fn => every((t, i) => { t.p[i] = fn(t.p[i]); if (t.n) t.n[i] = fn(
 let b = bbox();
 log(`  raw size  x=${b.size[0].toFixed(2)} y=${b.size[1].toFixed(2)} z=${b.size[2].toFixed(2)}`);
 
+/* --as-is: the model was already authored in the engine's body space
+   (+Z forward, +Y up, origin at the axle midpoint over the rest contact
+   plane). Fitting it would only move it off the marks it was built to. */
+const AS_IS = flag('as-is');
+if (AS_IS) log('  --as-is: taking the geometry verbatim, no reorient/scale/centre');
+
 /* Orientation. Wheel objects are the strongest cue available: four of them sit
    at the corners of a horizontal rectangle, so the axis their centres vary
    least along is up, and the axis they vary most along is the wheelbase, which
    is forward. Fall back to bounding-box shape when the model has no named
    wheels. */
+if (!AS_IS) {
 const centroid = tris => {
   const c = [0, 0, 0];
   let n = 0;
@@ -105,45 +112,67 @@ if (!flag('no-auto-front')) {
 if (fwdOpt && fwdOpt[0] === '-') remap(p => [-p[0], p[1], -p[2]]);
 if (flag('flip')) { log('  --flip'); remap(p => [-p[0], p[1], -p[2]]); }
 b = bbox();
-
-/* ---------------------------------------------------- scale and centre -- */
-const scale = TARGET_LEN / b.size[2];
-remap(p => [p[0] * scale, p[1] * scale, p[2] * scale]);
-b = bbox();
-
-/* wheel clusters give the axle midpoint and the rolling radius */
-let fit = null;
-if (wheelParts.length) {
-  const pts = [];
-  for (const p of wheelParts) for (const t of p.tris) for (let i = 0; i < 3; i++) pts.push(t.p[i]);
-  const cs = [[1,1],[-1,1],[1,-1],[-1,-1]].map(([sx, sz]) => {
-    const sel = pts.filter(p => Math.sign(p[0] - (b.lo[0]+b.size[0]/2)) === sx && Math.sign(p[2] - (b.lo[2]+b.size[2]/2)) === sz);
-    if (sel.length < 12) return null;
-    const c = [0,1,2].map(a => sel.reduce((s,p)=>s+p[a],0)/sel.length);
-    const r = Math.max(...sel.map(p => Math.hypot(p[1]-c[1], p[2]-c[2])));
-    return { c, r, n: sel.length };
-  }).filter(Boolean);
-  if (cs.length >= 2) {
-    fit = {
-      mountX: +(cs.reduce((s,w)=>s+Math.abs(w.c[0]),0)/cs.length).toFixed(3),
-      mountZ: +(cs.reduce((s,w)=>s+Math.abs(w.c[2]),0)/cs.length).toFixed(3),
-      wheelR: +(cs.reduce((s,w)=>s+w.r,0)/cs.length).toFixed(3),
-      count: cs.length
-    };
-    log(`  wheels: ${cs.length} clusters, track ±${fit.mountX} m, wheelbase ±${fit.mountZ} m, radius ${fit.wheelR} m`);
-  }
 }
 
-/* centre on the axle midpoint (or the bbox), and sit the tyres on the engine's
-   rest contact plane, which sits below the body origin by the suspension
-   geometry plus the fitted wheel radius. */
-const cx = b.lo[0] + b.size[0] / 2;
-const cz = fit ? 0 : b.lo[2] + b.size[2] / 2;
-const MOUNT_Y = 0.30, SUS_REST = 0.52, REST_COMP = 0.15;
-const GROUND = MOUNT_Y - (SUS_REST + (fit ? fit.wheelR : 0.44)) + REST_COMP;
-remap(p => [p[0] - cx, p[1] - b.lo[1] + GROUND, p[2] - cz]);
-b = bbox();
-log(`  fitted    x=${b.size[0].toFixed(2)} y=${b.size[1].toFixed(2)} z=${b.size[2].toFixed(2)} m`);
+/* ---------------------------------------------------- scale and centre -- */
+let fit = null;
+const bboxOf = tris => {
+  const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  for (const t of tris) for (const p of t.p) for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], p[a]); hi[a] = Math.max(hi[a], p[a]); }
+  return { lo, hi, size: hi.map((h, a) => h - lo[a]) };
+};
+
+if (AS_IS) {
+  /* trust the author: only read the suspension numbers back off the mesh */
+  const wb = wheelParts.length ? bboxOf(wheelParts.flatMap(p => p.tris)) : null;
+  const wheelR = wb ? +(Math.max(wb.size[1], wb.size[2]) / 2).toFixed(3) : 0.44;
+  fit = {
+    wheelR,
+    mountX: +((opt('track', null) ? +opt('track') / 2 : 0.80)).toFixed(3),
+    mountZ: +((opt('wheelbase', null) ? +opt('wheelbase') / 2 : 1.475)).toFixed(3)
+  };
+  log(`  suspension: track ±${fit.mountX} m, wheelbase ±${fit.mountZ} m, wheel radius ${fit.wheelR} m`);
+  b = bbox();
+  log(`  extents   x=${b.size[0].toFixed(2)} y=${b.size[1].toFixed(2)} z=${b.size[2].toFixed(2)} m, ` +
+      `body sits ${(b.lo[1] + 0.49).toFixed(2)} m over the ground plane`);
+} else {
+  const scale = TARGET_LEN / b.size[2];
+  remap(p => [p[0] * scale, p[1] * scale, p[2] * scale]);
+  b = bbox();
+
+  /* wheel clusters give the axle midpoint and the rolling radius */
+  if (wheelParts.length) {
+    const pts = [];
+    for (const p of wheelParts) for (const t of p.tris) for (let i = 0; i < 3; i++) pts.push(t.p[i]);
+    const mid = [b.lo[0] + b.size[0] / 2, 0, b.lo[2] + b.size[2] / 2];
+    const cs = [[1,1],[-1,1],[1,-1],[-1,-1]].map(([sx, sz]) => {
+      const sel = pts.filter(p => Math.sign(p[0] - mid[0]) === sx && Math.sign(p[2] - mid[2]) === sz);
+      if (sel.length < 12) return null;
+      const c = [0,1,2].map(a => sel.reduce((s2,p)=>s2+p[a],0)/sel.length);
+      const r = Math.max(...sel.map(p => Math.hypot(p[1]-c[1], p[2]-c[2])));
+      return { c, r };
+    }).filter(Boolean);
+    if (cs.length >= 2) {
+      fit = {
+        mountX: +(cs.reduce((s2,w)=>s2+Math.abs(w.c[0]),0)/cs.length).toFixed(3),
+        mountZ: +(cs.reduce((s2,w)=>s2+Math.abs(w.c[2]),0)/cs.length).toFixed(3),
+        wheelR: +(cs.reduce((s2,w)=>s2+w.r,0)/cs.length).toFixed(3)
+      };
+      log(`  wheels: ${cs.length} clusters, track ±${fit.mountX} m, wheelbase ±${fit.mountZ} m, radius ${fit.wheelR} m`);
+    }
+  }
+
+  /* centre on the axle midpoint (or the bbox), and sit the tyres on the engine's
+     rest contact plane, which sits below the body origin by the suspension
+     geometry plus the fitted wheel radius. */
+  const cx = b.lo[0] + b.size[0] / 2;
+  const cz = fit ? 0 : b.lo[2] + b.size[2] / 2;
+  const MOUNT_Y = 0.30, SUS_REST = 0.52, REST_COMP = 0.15;
+  const GROUND = MOUNT_Y - (SUS_REST + (fit ? fit.wheelR : 0.44)) + REST_COMP;
+  remap(p => [p[0] - cx, p[1] - b.lo[1] + GROUND, p[2] - cz]);
+  b = bbox();
+  log(`  fitted    x=${b.size[0].toFixed(2)} y=${b.size[1].toFixed(2)} z=${b.size[2].toFixed(2)} m`);
+}
 
 /* -------------------------------------------------------------- reduce -- */
 function decimate(tris, budget) {
@@ -214,6 +243,11 @@ let wheelB64 = null;
 if (wheelParts.length && fit) {
   /* one wheel, moved to the origin, so the engine can spin and steer it */
   const all = wheelParts.flatMap(p => p.tris);
+  if (AS_IS) {
+    const w = decimate(all, WTRIS);
+    log(`  wheel  ${all.length} -> ${w.length} triangles (already on its own axle)`);
+    wheelB64 = pack(w);
+  } else {
   const pick = all.filter(t => t.p.every(p => p[0] > 0 && p[2] > 0));
   const src = pick.length > 20 ? pick : all;
   const c = [0, 1, 2].map(a => {
@@ -224,6 +258,7 @@ if (wheelParts.length && fit) {
   const w = decimate(centred, WTRIS);
   log(`  wheel  ${src.length} -> ${w.length} triangles`);
   wheelB64 = pack(w);
+  }
 }
 
 const payload = {
