@@ -80,11 +80,18 @@ hard lip. Measured over 45 s of full-throttle driving, that yields 5–13 jumps
 with 1.4–3.8 s of hangtime. An airborne leveling torque helps you land flat,
 and anything still inverted after 1.9 s is set back on its wheels.
 
-**Cover** — the title screen is the live engine, not a picture: the camera
-orbits the parked truck at the (flattest-ground) spawn while sand streams past
-on the wind, the wordmark rises, and on TAP TO DRIVE the camera blends over to
-the chase view. Cover and HUD are both laid out inside the safe-area insets and
-verified against simulated iPhone notch/home-indicator geometry.
+**Cover** — two treatments, picked by orientation. In **portrait** (phones) it
+is the painted cover art, embedded as a 75 KB WebP data URI and slowly
+Ken-Burnsed. The art is 9:16 but modern iPhones are roughly 9:19.5, so
+`background-size: cover` would crop about 8.6% off each side and clip the
+wordmark; instead the encoder pads the artwork out to a tall-phone aspect by
+stretching its top row of sky and bottom row of sand, so the crop eats padding
+rather than art. In **landscape** it is the live engine — the camera orbits the
+parked truck at the (flattest-ground) spawn while sand streams past on the wind,
+and on TAP TO DRIVE it blends over to the chase view.
+
+Cover and HUD are both laid out inside the safe-area insets and verified against
+simulated iPhone notch/home-indicator geometry.
 
 **Phone-first details** — every inset goes through `--sat/--sab/--sal/--sar`,
 so a test can simulate a notched phone and assert that nothing lands outside
@@ -100,8 +107,8 @@ fallback) that reacts to sustained frame time.
 open index.html          # or serve the directory, any static host works
 ```
 
-`index.html` is ~370 KB, most of which is the packed vehicle mesh. It is still
-one file with no build step and no runtime fetches.
+`index.html` is ~450 KB: the packed vehicle mesh plus the embedded cover art.
+It is still one file with no build step and no runtime fetches.
 
 Deploying: the repo root is a static site with a single entry point, so Vercel
 (or any static host) needs no configuration.
