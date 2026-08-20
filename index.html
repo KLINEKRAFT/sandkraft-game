@@ -15,6 +15,10 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
   --accent:#84b4dd;
   --accent-dim:#4e7ba6;
   --steel:#6e90ae;
@@ -34,12 +38,14 @@ body{
 canvas#gl{position:fixed;top:0;left:0;width:100%;height:100%;display:block;background:#000;}
 
 #hud{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;
-  font-size:11px;letter-spacing:.09em;text-transform:uppercase;}
+  font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  opacity:0;transition:opacity .7s ease .25s;}
+#hud.live{opacity:1;}
 .pad{position:absolute;}
 
 /* ---- compass ---- */
-#compass{top:calc(env(safe-area-inset-top) + 8px);left:50%;transform:translateX(-50%);
-  width:min(52vw,320px);height:26px;overflow:hidden;
+#compass{top:calc(var(--sat) + 8px);left:calc(50% + (var(--sal) - var(--sar)) / 2);transform:translateX(-50%);
+  width:min(46vw,320px);height:26px;overflow:hidden;
   -webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);
   mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);}
 #tape{position:absolute;top:0;left:0;height:100%;will-change:transform;}
@@ -50,32 +56,32 @@ canvas#gl{position:fixed;top:0;left:0;width:100%;height:100%;display:block;backg
 #tape i.major{top:10px;height:10px;background:rgba(132,180,221,.45);}
 #needle{position:absolute;left:50%;top:0;width:1px;height:26px;background:var(--accent);
   box-shadow:0 0 6px rgba(132,180,221,.8);}
-#bearing{top:calc(env(safe-area-inset-top) + 34px);left:50%;transform:translateX(-50%);
+#bearing{top:calc(var(--sat) + 34px);left:calc(50% + (var(--sal) - var(--sar)) / 2);transform:translateX(-50%);
   font-size:10px;color:var(--dim);}
 
 /* ---- speed ---- */
-#speedbox{left:calc(env(safe-area-inset-left) + var(--hud-pad));bottom:calc(env(safe-area-inset-bottom) + var(--hud-pad));
+#speedbox{left:calc(var(--sal) + var(--hud-pad));bottom:calc(var(--sab) + var(--hud-pad));
   display:flex;align-items:flex-end;gap:6px;}
 #speed{font-size:54px;line-height:.82;font-weight:500;color:#eaf3fb;letter-spacing:-.02em;
   font-variant-numeric:tabular-nums;text-shadow:0 0 22px rgba(132,180,221,.25);}
 #unit{font-size:10px;color:var(--dim);padding-bottom:6px;}
-#gauge{left:calc(env(safe-area-inset-left) + var(--hud-pad));bottom:calc(env(safe-area-inset-bottom) + var(--hud-pad) + 60px);
+#gauge{left:calc(var(--sal) + var(--hud-pad));bottom:calc(var(--sab) + var(--hud-pad) + 60px);
   width:132px;height:3px;background:rgba(132,180,221,.13);}
 #gauge>span{display:block;height:100%;width:0%;background:var(--accent);box-shadow:0 0 8px rgba(132,180,221,.6);
   transition:width .06s linear;}
-#tele{left:calc(env(safe-area-inset-left) + var(--hud-pad));bottom:calc(env(safe-area-inset-bottom) + var(--hud-pad) + 74px);
+#tele{left:calc(var(--sal) + var(--hud-pad));bottom:calc(var(--sab) + var(--hud-pad) + 74px);
   font-size:10px;color:var(--dim);line-height:1.7;}
 #tele span{color:var(--steel);}
 
 /* ---- steer readout ---- */
-#steerbar{left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 10px);
+#steerbar{left:calc(50% + (var(--sal) - var(--sar)) / 2);transform:translateX(-50%);bottom:calc(var(--sab) + 10px);
   width:min(38vw,220px);height:2px;background:rgba(132,180,221,.13);}
 #steerbar>i{position:absolute;top:-3px;left:50%;width:2px;height:8px;background:var(--accent);
   transform:translateX(-50%);box-shadow:0 0 8px rgba(132,180,221,.7);}
 #steerbar>u{position:absolute;top:-6px;left:50%;width:1px;height:14px;background:rgba(132,180,221,.25);}
 
 /* ---- buttons ---- */
-#tools{top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + var(--hud-pad));
+#tools{top:calc(var(--sat) + 8px);right:calc(var(--sar) + var(--hud-pad));
   display:flex;gap:6px;pointer-events:auto;}
 .tool{pointer-events:auto;padding:7px 9px;font:inherit;font-size:9.5px;letter-spacing:.1em;
   color:var(--steel);background:var(--panel);border:1px solid var(--line);border-radius:3px;
@@ -83,16 +89,16 @@ canvas#gl{position:fixed;top:0;left:0;width:100%;height:100%;display:block;backg
 .tool.on{color:#04111c;background:var(--accent);border-color:var(--accent);}
 
 /* ---- pedals ---- */
-#gas,#brk{pointer-events:auto;position:absolute;right:calc(env(safe-area-inset-right) + var(--hud-pad));
+#gas,#brk{pointer-events:auto;position:absolute;right:calc(var(--sar) + var(--hud-pad));
   border-radius:50%;display:flex;align-items:center;justify-content:center;
   border:1px solid var(--line);background:var(--panel);color:var(--steel);
   font-size:10px;letter-spacing:.12em;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
-#gas{width:104px;height:104px;bottom:calc(env(safe-area-inset-bottom) + 22px);}
-#brk{width:74px;height:74px;bottom:calc(env(safe-area-inset-bottom) + 138px);right:calc(env(safe-area-inset-right) + var(--hud-pad) + 16px);}
+#gas{width:104px;height:104px;bottom:calc(var(--sab) + 22px);}
+#brk{width:74px;height:74px;bottom:calc(var(--sab) + 138px);right:calc(var(--sar) + var(--hud-pad) + 16px);}
 #gas.hit,#brk.hit{background:rgba(132,180,221,.30);color:#eaf3fb;border-color:var(--accent);
   box-shadow:0 0 26px rgba(132,180,221,.28) inset;}
-#hbk{pointer-events:auto;position:absolute;right:calc(env(safe-area-inset-right) + var(--hud-pad) + 112px);
-  bottom:calc(env(safe-area-inset-bottom) + 30px);width:58px;height:58px;border-radius:50%;
+#hbk{pointer-events:auto;position:absolute;right:calc(var(--sar) + var(--hud-pad) + 112px);
+  bottom:calc(var(--sab) + 30px);width:58px;height:58px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;border:1px solid var(--line);
   background:var(--panel);color:var(--dim);font-size:9px;letter-spacing:.1em;}
 #hbk.hit{background:rgba(221,140,132,.28);color:#ffe6e0;border-color:rgba(221,140,132,.7);}
@@ -104,36 +110,77 @@ canvas#gl{position:fixed;top:0;left:0;width:100%;height:100%;display:block;backg
 #stick>i{position:absolute;top:50%;left:50%;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;
   background:rgba(132,180,221,.5);box-shadow:0 0 16px rgba(132,180,221,.5);}
 
-#hint{position:absolute;top:calc(env(safe-area-inset-top) + 52px);left:50%;transform:translateX(-50%);
+#hint{position:absolute;top:calc(var(--sat) + 52px);left:calc(50% + (var(--sal) - var(--sar)) / 2);transform:translateX(-50%);
   font-size:9px;color:rgba(84,104,124,.8);white-space:nowrap;transition:opacity 1.2s ease;}
-#fps{top:calc(env(safe-area-inset-top) + 8px);left:calc(env(safe-area-inset-left) + var(--hud-pad));
+#fps{top:calc(var(--sat) + 8px);left:calc(var(--sal) + var(--hud-pad));
   font-size:9.5px;color:var(--dim);}
 
-/* ---- boot ---- */
-#boot{position:fixed;inset:0;z-index:30;background:#000;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:18px;text-align:center;padding:24px;
-  transition:opacity .55s ease;}
+/* ---- animated cover ---- */
+#boot{position:fixed;top:0;left:0;right:0;bottom:0;z-index:30;display:flex;flex-direction:column;
+  justify-content:space-between;align-items:center;text-align:center;
+  padding:calc(var(--sat) + 16px) calc(var(--sar) + 18px) calc(var(--sab) + 16px) calc(var(--sal) + 18px);
+  transition:opacity .75s ease;}
 #boot.gone{opacity:0;pointer-events:none;}
-#title{font-size:clamp(30px,9vw,58px);font-weight:600;letter-spacing:.34em;margin-left:.34em;color:#eaf3fb;}
-#sub{font-size:10px;letter-spacing:.26em;color:var(--steel);}
-#bar{width:min(62vw,300px);height:2px;background:rgba(132,180,221,.14);}
-#bar>span{display:block;height:100%;width:0%;background:var(--accent);transition:width .2s;}
-#status{font-size:9.5px;color:var(--dim);letter-spacing:.2em;height:12px;}
-#go{pointer-events:auto;margin-top:6px;padding:14px 28px;font:inherit;font-size:11px;letter-spacing:.24em;
-  color:#04111c;background:var(--accent);border:0;border-radius:3px;opacity:0;transition:opacity .4s;
-  text-transform:uppercase;}
-#go.ready{opacity:1;}
-#legal{position:absolute;bottom:calc(env(safe-area-inset-bottom) + 14px);font-size:8.5px;color:#26333f;letter-spacing:.2em;}
+#curtain{position:absolute;top:0;left:0;right:0;bottom:0;background:#05080b;
+  transition:opacity 1.5s ease .15s;}
+#boot.lit #curtain{opacity:0;}
+#scrim{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;
+  background:linear-gradient(180deg, rgba(5,9,13,.55) 0%, rgba(5,9,13,.22) 26%, rgba(5,9,13,0) 48%,
+    rgba(5,9,13,.24) 74%, rgba(5,9,13,.72) 100%);}
+#grain{position:absolute;top:-25%;left:-25%;right:-25%;bottom:-25%;pointer-events:none;opacity:.05;
+  background:repeating-linear-gradient(104deg,#fff 0 1px,transparent 1px 7px);
+  animation:drift 7.5s linear infinite;}
+@keyframes drift{from{transform:translate3d(0,0,0);}to{transform:translate3d(-48px,13px,0);}}
 
+#cover-top,#cover-bottom{position:relative;width:100%;}
+#cover-top{padding-top:2vh;}
+#wordmark{font-family:ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold",system-ui,-apple-system,sans-serif;
+  font-weight:800;letter-spacing:-.012em;line-height:.94;text-transform:none;
+  font-size:clamp(40px,min(13.5vw,19vh),104px);
+  animation:float 7s ease-in-out infinite 1.2s;}
+#wordmark span{display:inline-block;opacity:0;transform:translateY(30px) scale(.94);
+  animation:rise 1s cubic-bezier(.16,.92,.24,1) forwards;color:#e3caa6;
+  text-shadow:0 2px 0 #ab8259,0 4px 0 #8c6845,0 6px 0 #6d5034,0 9px 0 #513c27,0 14px 30px rgba(0,0,0,.6);}
+#wordmark span:nth-child(2){animation-delay:.14s;color:#f2e0c3;}
+@keyframes rise{to{opacity:1;transform:translateY(0) scale(1);}}
+@keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-5px);}}
+#rule{width:0;height:1px;margin:14px auto 0;background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  animation:widen 1.3s ease .5s forwards;}
+@keyframes widen{to{width:min(62%,320px);}}
+#tagline{margin-top:10px;font-size:9.5px;letter-spacing:.34em;color:#dbe7f1;opacity:0;
+  text-shadow:0 1px 4px rgba(0,0,0,.7);
+  animation:fadein .9s ease .85s forwards;}
+@keyframes fadein{to{opacity:.85;}}
+
+#cover-bottom{display:flex;flex-direction:column;align-items:center;gap:12px;}
+#bar{width:min(62vw,280px);height:2px;background:rgba(226,201,166,.18);overflow:hidden;}
+#bar>span{display:block;height:100%;width:0%;background:var(--accent);transition:width .25s ease;
+  box-shadow:0 0 10px rgba(132,180,221,.7);}
+#status{font-size:9px;color:#dbe7f1;letter-spacing:.24em;height:12px;text-shadow:0 1px 4px rgba(0,0,0,.7);}
+#go{pointer-events:auto;padding:15px 30px;font:inherit;font-size:11px;letter-spacing:.26em;
+  color:#08151f;background:var(--accent);border:0;border-radius:4px;text-transform:uppercase;
+  opacity:0;transform:translateY(10px);transition:opacity .55s ease,transform .55s ease;}
+#go.ready{opacity:1;transform:none;animation:pulse 2.8s ease-in-out .7s infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(132,180,221,.5);}55%{box-shadow:0 0 0 16px rgba(132,180,221,0);}}
+#legal{font-size:8px;letter-spacing:.2em;color:rgba(219,231,241,.55);text-shadow:0 1px 4px rgba(0,0,0,.6);}
+
+@media (max-height:430px){
+  #cover-top{padding-top:0;}
+  #wordmark{font-size:clamp(34px,13vh,60px);}
+  #rule{margin-top:8px;}
+  #tagline{margin-top:6px;font-size:8.5px;}
+  #cover-bottom{gap:8px;}
+  #go{padding:12px 24px;}
+}
 @media (orientation:portrait) and (max-width:520px){
-  #compass{top:calc(env(safe-area-inset-top) + 46px);width:min(78vw,300px);}
-  #bearing{top:calc(env(safe-area-inset-top) + 72px);}
-  #hint{top:calc(env(safe-area-inset-top) + 90px);white-space:normal;width:80vw;text-align:center;line-height:1.6;}
-  #tools{left:calc(env(safe-area-inset-left) + var(--hud-pad));right:auto;}
-  #fps{top:calc(env(safe-area-inset-top) + 46px);left:auto;right:calc(env(safe-area-inset-right) + var(--hud-pad));}
+  #compass{top:calc(var(--sat) + 46px);width:min(78vw,300px);}
+  #bearing{top:calc(var(--sat) + 72px);}
+  #hint{top:calc(var(--sat) + 90px);white-space:normal;width:80vw;text-align:center;line-height:1.6;}
+  #tools{left:calc(var(--sal) + var(--hud-pad));right:auto;}
+  #fps{top:calc(var(--sat) + 46px);left:auto;right:calc(var(--sar) + var(--hud-pad));}
   #speed{font-size:44px;}
   #gas{width:92px;height:92px;}
-  #brk{width:66px;height:66px;bottom:calc(env(safe-area-inset-bottom) + 126px);}
+  #brk{width:66px;height:66px;bottom:calc(var(--sab) + 126px);}
   #hbk{display:none;}
   #hint{font-size:8px;}
 }
@@ -171,12 +218,20 @@ canvas#gl{position:fixed;top:0;left:0;width:100%;height:100%;display:block;backg
 </div>
 
 <div id="boot">
-  <div id="title">SANDKRAFT</div>
-  <div id="sub">SEED 1337 · STATIC DESERT</div>
-  <div id="bar"><span id="bar-fill"></span></div>
-  <div id="status">BOOTING</div>
-  <button id="go">TAP TO DRIVE</button>
-  <div id="legal">WEBGL2 · SINGLE FILE · NO BUILD STEP</div>
+  <div id="curtain"></div>
+  <div id="scrim"></div>
+  <div id="grain"></div>
+  <div id="cover-top">
+    <div id="wordmark"><span>Sand</span><span>Kraft</span></div>
+    <div id="rule"></div>
+    <div id="tagline">PROCEDURAL DESERT &middot; SEED 1337</div>
+  </div>
+  <div id="cover-bottom">
+    <div id="bar"><span id="bar-fill"></span></div>
+    <div id="status">BOOTING</div>
+    <button id="go">TAP TO DRIVE</button>
+    <div id="legal">WEBGL2 &middot; SINGLE FILE &middot; NO BUILD STEP</div>
+  </div>
 </div>
 
 <script>
@@ -399,12 +454,24 @@ const WIND_A = 0.55;
 const WDX = Math.cos(WIND_A), WDZ = Math.sin(WIND_A);
 const WIND_B = WIND_A + 0.32;
 const WBX = Math.cos(WIND_B), WBZ = Math.sin(WIND_B);
-const DUNE_L = 160, DUNE_K = 0.68;
+const DUNE_L = 160, DUNE_K = 0.66;
 
 /* asymmetric dune profile: long windward rise, short steep lee slip face */
 function duneProfile(f) {
   if (f < DUNE_K) return 0.5 - 0.5 * Math.cos(Math.PI * f / DUNE_K);
   return 0.5 + 0.5 * Math.cos(Math.PI * (f - DUNE_K) / (1 - DUNE_K));
+}
+/* ramp profile: 78% run-up, 22% drop — a lip you can launch off */
+const KICK_K = 0.80;
+function kickProfile(f) {
+  if (f < KICK_K) return 0.5 - 0.5 * Math.cos(Math.PI * f / KICK_K);
+  return 0.5 + 0.5 * Math.cos(Math.PI * (f - KICK_K) / (1 - KICK_K));
+}
+function kickAt(x, z, s) {
+  const k = smoothstep(0.46, 0.68, fbm(x * 0.00085 - 88.2, z * 0.00085 + 12.4, 2));
+  if (k < 0.001) return 0;
+  const ph = s / 62 + (fbm(x * 0.0042 + 3.3, z * 0.0042 - 9.1, 2) - 0.5) * 2.4;
+  return 8.0 * k * kickProfile(fract(ph));
 }
 const fract = x => x - Math.floor(x);
 
@@ -425,7 +492,7 @@ function roadness(x, z) {
 /* full terrain height — the single source of truth for mesh AND physics */
 function heightAt(x, z) {
   const base = baseSwell(x, z);
-  const mask = smoothstep(0.30, 0.52, fbm(x * 0.0006 + 41.3, z * 0.0006 - 17.7, 3));
+  const mask = smoothstep(0.24, 0.44, fbm(x * 0.0006 + 41.3, z * 0.0006 - 17.7, 3));
 
   const s = x * WDX + z * WDZ;
   const t = -x * WDZ + z * WDX;
@@ -439,6 +506,8 @@ function heightAt(x, z) {
   const ph2 = s2 / 46 + (fbm(x * 0.0062 + 13.7, z * 0.0062 - 4.1, 2) - 0.5) * 2.0;
   h += 3.6 * mask * duneProfile(fract(ph2));
 
+  h += kickAt(x, z, s);        /* scattered ramps out in the open sand */
+
   /* graded road corridor cut through the field */
   const dr = Math.abs(x - roadCenterX(z));
   if (dr < 46) {
@@ -450,13 +519,13 @@ function heightAt(x, z) {
 /* cheaper field used for baking sun shadows */
 function heightCoarse(x, z) {
   const base = baseSwell(x, z);
-  const mask = smoothstep(0.30, 0.52, fbm(x * 0.0006 + 41.3, z * 0.0006 - 17.7, 2));
+  const mask = smoothstep(0.24, 0.44, fbm(x * 0.0006 + 41.3, z * 0.0006 - 17.7, 2));
   const s = x * WDX + z * WDZ;
   const t = -x * WDZ + z * WDX;
   const warp = (fbm(x * 0.0021 + 7.1, z * 0.0021 + 3.3, 2) - 0.5) * 2.2;
   const phase = s / DUNE_L + warp + (vnoise2(t * 0.0032, s * 0.0011) - 0.5) * 1.5;
   const amp = mask * (14 + 17 * fbm(x * 0.0013 + 21.5, z * 0.0013 + 5.5, 2));
-  let h = base + amp * duneProfile(fract(phase));
+  let h = base + amp * duneProfile(fract(phase)) + kickAt(x, z, s);
   const dr = Math.abs(x - roadCenterX(z));
   if (dr < 46) h += (roadBase(z) - h) * (smoothstep(46, 13, dr) * 0.93);
   return h;
@@ -1074,6 +1143,18 @@ MB.prototype.cylX = function (c, r, halfW, segs, col, capCol) {
     this.tri([c[0] - halfW, c[1], c[2]], pt(-1, i + 1), pt(-1, i), capCol || col);
   }
 };
+/* cylinder with its axis along Z */
+MB.prototype.cylZ = function (c, r, halfW, segs, col, capCol) {
+  const pt = (side, i) => {
+    const t = 2 * Math.PI * (i % segs) / segs;
+    return [c[0] + Math.cos(t) * r, c[1] + Math.sin(t) * r, c[2] + side * halfW];
+  };
+  for (let i = 0; i < segs; i++) {
+    this.quad(pt(1, i), pt(-1, i), pt(-1, i + 1), pt(1, i + 1), col);
+    this.tri([c[0], c[1], c[2] + halfW], pt(1, i), pt(1, i + 1), capCol || col);
+    this.tri([c[0], c[1], c[2] - halfW], pt(-1, i + 1), pt(-1, i), capCol || col);
+  }
+};
 MB.prototype.upload = function () {
   const data = new Float32Array(this.a);
   const vao = gl.createVertexArray(), vbo = gl.createBuffer();
@@ -1174,37 +1255,85 @@ MESH.rockB = rockMesh(17).uploadInstanced(320);
 MESH.pylon = pylonMesh().uploadInstanced(48);
 MESH.wreck = wreckMesh().uploadInstanced(8);
 
-/* ---- the buggy ---- */
+/* ---- the truck: low-poly boxy 4-door body, stand-in for the Meshy mesh ----
+   Body space: +z forward, +y up, origin at the axle midpoint ~0.49 m over the
+   ground at rest. Proportions follow a 4-door Bronco: 4.5 m long, 1.93 wide,
+   1.88 to the roof, 2.95 m wheelbase. */
 (function buildCar() {
   const mb = new MB();
-  const body = [0.60, 0.60, 0.57], cage = [0.10, 0.11, 0.12];
-  const accent = [0.30, 0.52, 0.74], dark = [0.17, 0.17, 0.18];
-  mb.box([0, 0.10, 0.10], [1.62, 0.44, 3.30], 0, body);        // hull
-  mb.box([0, 0.34, 1.42], [1.30, 0.30, 0.70], 0, dark);        // nose
-  mb.box([0, 0.44, -1.30], [1.30, 0.52, 0.90], 0, dark);       // engine bay
-  mb.box([0, 0.60, -1.30], [0.80, 0.14, 0.60], 0, accent);
-  mb.box([-0.86, 0.06, 0.0], [0.10, 0.30, 2.60], 0, cage);     // side rails
-  mb.box([0.86, 0.06, 0.0], [0.10, 0.30, 2.60], 0, cage);
+  const body   = [0.34, 0.41, 0.47];   // Area-51 grey-blue
+  const roof   = [0.055, 0.055, 0.062];
+  const trim   = [0.105, 0.108, 0.115];
+  const glass  = [0.042, 0.052, 0.068];
+  const grille = [0.085, 0.085, 0.095];
+  const chrome = [0.62, 0.62, 0.60];
+  const lamp   = [0.86, 0.83, 0.70];
+  const tail   = [0.30, 0.045, 0.035];
+  const amber  = [0.58, 0.30, 0.06];
+
+  /* tub + frame */
+  mb.box([0, -0.12, -0.10], [1.74, 0.24, 4.05], 0, trim);
+  mb.box([0, 0.14, -0.10], [1.86, 0.56, 4.30], 0, body);
+  mb.box([0, 0.44, -0.62], [1.80, 0.14, 2.05], 0, body);      // belt line
+
+  /* squared fender flares */
   for (const sx of [-1, 1]) {
-    mb.box([sx * 0.72, 0.72, 0.55], [0.10, 1.00, 0.10], 0, cage);
-    mb.box([sx * 0.72, 0.70, -0.85], [0.10, 0.96, 0.10], 0, cage);
-    mb.box([sx * 0.72, 1.18, -0.15], [0.10, 0.10, 1.50], 0, cage);
+    for (const z of [1.475, -1.475]) {
+      mb.box([sx * 0.96, 0.00, z], [0.14, 0.26, 1.12], 0, trim);
+      mb.box([sx * 0.90, 0.20, z], [0.12, 0.14, 1.24], 0, trim);
+    }
+    mb.box([sx * 0.94, -0.30, -0.05], [0.11, 0.11, 2.45], 0, trim);   // rock rail
   }
-  mb.box([0, 1.18, 0.55], [1.54, 0.10, 0.10], 0, cage);
-  mb.box([0, 1.18, -0.85], [1.54, 0.10, 0.10], 0, cage);
-  mb.box([0, 0.52, 0.30], [1.20, 0.06, 0.90], 0, dark);        // seat pan
-  mb.box([-0.32, 0.78, -0.12], [0.46, 0.50, 0.10], 0, dark);   // seat backs
-  mb.box([0.32, 0.78, -0.12], [0.46, 0.50, 0.10], 0, dark);
-  mb.box([0, 1.30, 0.50], [1.10, 0.12, 0.22], 0, [0.55, 0.52, 0.40]); // light bar
-  mb.box([0, 0.42, 1.70], [1.20, 0.10, 0.24], 0, cage);        // bumper
+
+  /* hood, with the trail-sight humps on the front corners */
+  mb.box([0, 0.46, 1.16], [1.74, 0.13, 1.32], 0, body);
+  for (const sx of [-1, 1]) mb.box([sx * 0.68, 0.56, 1.62], [0.20, 0.10, 0.30], 0, trim);
+
+  /* face: flat grille, round lamps, bumper */
+  mb.box([0, 0.28, 1.86], [1.66, 0.52, 0.14], 0, grille);
+  mb.box([0, 0.34, 1.93], [0.86, 0.12, 0.05], 0, chrome);      // BRONCO bar
+  for (const sx of [-1, 1]) {
+    mb.cylZ([sx * 0.62, 0.30, 1.90], 0.155, 0.06, 10, lamp, lamp);
+    mb.cylZ([sx * 0.62, 0.30, 1.86], 0.185, 0.05, 10, trim, trim);
+  }
+  mb.box([0, 0.00, 1.98], [1.92, 0.28, 0.26], 0, trim);
+  for (const sx of [-1, 1]) mb.box([sx * 0.74, 0.08, 2.10], [0.12, 0.12, 0.10], 0, amber);
+
+  /* greenhouse: glass volume, body pillars, roof slab */
+  mb.box([0, 0.94, -0.28], [1.72, 0.66, 2.36], 0, glass);
+  for (const sx of [-1, 1]) {
+    mb.box([sx * 0.86, 0.94, 0.86], [0.10, 0.70, 0.13], 0, body);   // A pillar
+    mb.box([sx * 0.86, 0.94, -0.12], [0.10, 0.70, 0.11], 0, body);  // B pillar
+    mb.box([sx * 0.86, 0.94, -1.42], [0.10, 0.70, 0.14], 0, body);  // C pillar
+    mb.box([sx * 0.98, 0.86, 0.94], [0.16, 0.14, 0.06], 0, trim);   // mirror
+  }
+  mb.box([0, 1.32, -0.30], [1.80, 0.14, 2.52], 0, roof);
+  mb.box([0, 1.24, 0.90], [1.76, 0.10, 0.16], 0, roof);             // windshield header
+  for (const sx of [-1, 1]) mb.box([sx * 0.80, 1.42, -0.30], [0.08, 0.08, 2.30], 0, trim);  // rack rails
+
+  /* tail: gate, spare, lights */
+  mb.box([0, 0.30, -2.28], [1.80, 1.00, 0.16], 0, body);
+  mb.box([0, 0.70, -2.34], [1.36, 0.44, 0.06], 0, glass);      // tailgate window
+  mb.cylZ([0.16, 0.30, -2.48], 0.44, 0.17, 12, [0.055, 0.055, 0.06], [0.075, 0.075, 0.08]);
+  mb.cylZ([0.16, 0.30, -2.44], 0.19, 0.16, 8, [0.16, 0.17, 0.19], [0.21, 0.22, 0.24]);
+  for (const sx of [-1, 1]) mb.box([sx * 0.76, 0.62, -2.36], [0.17, 0.26, 0.07], 0, tail);
+  mb.box([0, 0.00, -2.36], [1.86, 0.28, 0.24], 0, trim);
+
+  /* light bar over the windshield */
+  mb.box([0, 1.44, 0.86], [1.26, 0.11, 0.14], 0, trim);
+  for (let i = -2; i <= 2; i++) mb.box([i * 0.22, 1.44, 0.93], [0.16, 0.08, 0.03], 0, lamp);
+
   MESH.car = mb.upload();
 
+  /* all-terrain tyre: chunky shoulder blocks, beadlock-ish rim */
   const wb = new MB();
-  wb.cylX([0, 0, 0], 0.44, 0.17, 12, [0.07, 0.07, 0.08], [0.13, 0.13, 0.14]);
-  wb.cylX([0, 0, 0], 0.22, 0.19, 8, [0.30, 0.32, 0.35], [0.38, 0.42, 0.46]);
-  for (let i = 0; i < 6; i++) {   // tread blocks
-    const t = 2 * Math.PI * i / 6;
-    wb.box([0, Math.cos(t) * 0.44, Math.sin(t) * 0.44], [0.38, 0.10, 0.10], 0, [0.11, 0.11, 0.12]);
+  const rubber = [0.052, 0.052, 0.058];
+  wb.cylX([0, 0, 0], 0.44, 0.19, 12, rubber, [0.10, 0.10, 0.11]);
+  wb.cylX([0, 0, 0], 0.24, 0.205, 10, [0.29, 0.30, 0.33], [0.36, 0.38, 0.41]);
+  wb.cylX([0, 0, 0], 0.11, 0.21, 8, [0.16, 0.17, 0.18], [0.20, 0.21, 0.22]);
+  for (let i = 0; i < 8; i++) {
+    const t = 2 * Math.PI * i / 8;
+    wb.box([0, Math.cos(t) * 0.435, Math.sin(t) * 0.435], [0.42, 0.13, 0.13], 0, rubber);
   }
   MESH.wheel = wb.upload();
 })();
@@ -1354,21 +1483,23 @@ const WRECK_SITES = [
 
 /* ------------------------------------ 5 vehicle: raycast suspension ----- */
 const G = 9.81;
+/* 4-door body-on-frame truck: 2.1 t, 2.95 m wheelbase, 1.60 m track */
 const CARP = {
-  mass: 950,
-  Ixx: 1350, Iyy: 1500, Izz: 380,
-  wheelR: 0.44, susRest: 0.52, susTravel: 0.36,
-  k: 17500, damp: 1750, antiRoll: 11000,
-  engine: 11500, vMax: 44, brake: 9000,
+  mass: 2100,
+  Ixx: 4650, Iyy: 4700, Izz: 1250,
+  wheelR: 0.44, susRest: 0.52, susTravel: 0.38,
+  k: 36000, damp: 3100, antiRoll: 13000,
+  bumpStop: 55000, bumpDamp: 7000, maxLoad: 46000,
+  engine: 21500, vMax: 41, brake: 18000,
   maxSteer: 33 * DEG,
   mounts: [
-    { x: -0.82, y: 0.30, z: 1.35, steer: 1 },
-    { x: 0.82, y: 0.30, z: 1.35, steer: 1 },
-    { x: -0.86, y: 0.30, z: -1.32, steer: 0 },
-    { x: 0.86, y: 0.30, z: -1.32, steer: 0 }
+    { x: -0.80, y: 0.30, z: 1.475, steer: 1 },
+    { x: 0.80, y: 0.30, z: 1.475, steer: 1 },
+    { x: -0.80, y: 0.30, z: -1.475, steer: 0 },
+    { x: 0.80, y: 0.30, z: -1.475, steer: 0 }
   ]
 };
-const UP = v3(0, 1, 0), FWD = v3(0, 0, 1), RIGHT = v3(1, 0, 0);
+const UP = v3(0, 1, 0), FWD = v3(0, 0, 1), RIGHT = v3(-1, 0, 0);
 
 const car = {
   p: v3(0, 0, 0), v: v3(0, 0, 0), w: v3(0, 0, 0), q: qid(),
@@ -1378,17 +1509,33 @@ const car = {
   contacts: 0, flipTimer: 0, surface: 0, grade: 0, slipAvg: 0, airborne: 0
 };
 
-const SPAWN_Z = 950;
+const SPAWN_Z = 950, SPAWN_OFFROAD = 88;
+/* park on the flattest ground near the spawn — it is the cover shot as well as
+   the starting position, and a slip face is a bad place to be either way */
+const SPAWN = (() => {
+  const cx = roadCenterX(SPAWN_Z) + SPAWN_OFFROAD, n = v3();
+  let best = -1, bx = cx, bz = SPAWN_Z;
+  for (let j = -4; j <= 4; j++) {
+    for (let i = -4; i <= 4; i++) {
+      const x = cx + i * 24, z = SPAWN_Z + j * 24;
+      if (Math.abs(x - roadCenterX(z)) < 36) continue;      // keep off the graded corridor
+      normalAt(n, x, z, 4);
+      const score = n.y - Math.hypot(i, j) * 0.005;
+      if (score > best) { best = score; bx = x; bz = z; }
+    }
+  }
+  return { x: bx, z: bz };
+})();
 function resetCar(toRoad) {
-  const z = toRoad ? SPAWN_Z : car.p.z;
-  const x = toRoad ? roadCenterX(z) : car.p.x;
+  const z = toRoad ? SPAWN.z : car.p.z;
+  const x = toRoad ? SPAWN.x : car.p.x;
   car.p.x = x; car.p.z = z;
   car.p.y = heightAt(x, z) + 1.4;
   vset(car.v, 0, 0, 0); vset(car.w, 0, 0, 0);
   car.q = qid();
   if (!toRoad) {
     /* keep heading, drop the roll */
-    const yaw = Math.atan2(car.fwd.x, car.fwd.z);
+    const yaw = Math.atan2(car.fwd.x, car.fwd.z);   /* quat yaw, not compass bearing */
     qAxisAngle(car.q, 0, 1, 0, yaw);
   }
   car.flipTimer = 0;
@@ -1397,7 +1544,7 @@ function resetCar(toRoad) {
 
 const _mount = v3(), _r = v3(), _rc = v3(), _down = v3(), _pv = v3(), _tmp = v3(), _tmp2 = v3();
 const _fw = v3(), _side = v3(), _ng = v3(), _F = v3(), _T = v3(), _acc = v3(), _rr = v3();
-const ROLL_CENTRE = -0.16;
+const ROLL_CENTRE = -0.42;
 
 function carStep(dt) {
   qrot(car.up, car.q, UP);
@@ -1461,12 +1608,18 @@ function carStep(dt) {
     vadd(_pv, car.v, _pv);                              // velocity of the contact point
 
     const vUp = vdot(_pv, car.up);
-    let load = CARP.k * comp - CARP.damp * vUp;
+    /* asymmetric damping: stiffer on rebound, so a hard landing is absorbed
+       instead of being stored in the spring and fired back out */
+    let load = CARP.k * comp - (vUp < 0 ? CARP.damp : CARP.damp * 2.1) * vUp;
     /* anti-roll bar */
     const other = car.wheels[i ^ 1];
     load += CARP.antiRoll * (comp - other.comp);
-    if (bottomed) load += 42000 * (maxD - t - CARP.susTravel);
-    load = clamp(load, 0, 32000);
+    if (bottomed) {
+      const pen = Math.min(maxD - t - CARP.susTravel, 0.45);
+      load += CARP.bumpStop * pen;
+      if (vUp < 0) load -= vUp * CARP.bumpDamp;      /* eat the impact */
+    }
+    load = clamp(load, 0, CARP.maxLoad);
     wl.load = load;
 
     vaddScaled(_F, _F, car.up, load);
@@ -1488,15 +1641,19 @@ function carStep(dt) {
     const road = roadness(cxw, czw);
     surf += road;
     const muLong = mix(1.30, 1.75, road);
-    let muLat = mix(0.98, 1.60, road);
-    const roll = mix(52, 12, road);
+    let muLat = mix(1.10, 1.70, road);
+    const roll = mix(82, 20, road);
 
     const rear = i >= 2;
     if (car.hand > 0.5 && rear) muLat *= 0.32;
 
     let Ff = (rear && car.hand > 0.5 ? 0 : drive * 0.25) - vf * roll - Math.sign(vf) * brakeF * 0.25;
-    if (car.hand > 0.5 && rear) Ff -= Math.sign(vf) * 2600;
-    if (car.throttle < 0.05 && car.brake < 0.05) Ff -= Math.sign(vf) * Math.min(Math.abs(vf) * 900, 260);
+    if (car.hand > 0.5 && rear) Ff -= Math.sign(vf) * 5200;
+    if (car.throttle < 0.05 && car.brake < 0.05) {
+      /* holds on a slope when parked, light engine braking when coasting */
+      const hold = mix(4400, 560, smoothstep(1.2, 2.6, Math.abs(vf)));
+      Ff -= Math.sign(vf) * Math.min(Math.abs(vf) * 2400, hold);
+    }
     let Fs = -load * clamp(vs * 0.70, -muLat, muLat);
 
     const lim = load * muLong;
@@ -1527,11 +1684,11 @@ function carStep(dt) {
 
   /* aero + airborne self-righting assist */
   const sp = vlen(car.v);
-  vaddScaled(_F, _F, car.v, -0.55 * sp);
+  vaddScaled(_F, _F, car.v, -0.90 * sp);   /* it is a brick */
   if (contacts === 0) {
     vcross(_tmp, car.up, UP);
-    vaddScaled(_T, _T, _tmp, 3200);
-    vaddScaled(_T, _T, car.w, -1800);
+    vaddScaled(_T, _T, _tmp, 19000);      /* level out for the landing */
+    vaddScaled(_T, _T, car.w, -9500);
     car.airborne = Math.min(1, car.airborne + dt * 3);
   } else {
     car.airborne = Math.max(0, car.airborne - dt * 6);
@@ -1561,7 +1718,7 @@ function carStep(dt) {
 
   if (car.up.y < 0.15 && contacts > 0) {
     car.flipTimer += dt;
-    if (car.flipTimer > 2.6) resetCar(false);
+    if (car.flipTimer > 1.9) resetCar(false);
   } else car.flipTimer = 0;
 }
 
@@ -1662,7 +1819,7 @@ function updateShadow() {
   const h = Math.max(0.4, car.p.y - heightAt(car.p.x, car.p.z));
   const off = clamp(h / SUN_TAN, 0, 26) * 0.38;
   const cx = car.p.x - SUN_HX * off, cz = car.p.z - SUN_HZ * off;
-  const a = 3.1 + off * 0.5, b = 1.75;
+  const a = 3.5 + off * 0.5, b = 1.95;
   const strength = clamp(1 - car.airborne * 0.55, 0.25, 1) * clamp(1 - (h - 0.6) * 0.25, 0.2, 1);
   let p = 0;
   for (let j = 0; j < SH_NZ; j++) {
@@ -1685,6 +1842,21 @@ function updateShadow() {
 
 /* ------------------------------------ 6 camera / input / hud / audio ---- */
 const cam = { p: v3(0, 0, -10), look: v3(), fov: 63 * DEG, mode: 0, init: false };
+let coverBlend = 1;                       // 1 = cover orbit, 0 = gameplay chase
+const _cp = v3(), _cl = v3();
+function coverCamera(t) {
+  const ang = 2.35 + t * 0.055;
+  const r = 9.8;
+  vset(_cp, car.p.x + Math.sin(ang) * r, car.p.y + 2.5 + Math.sin(t * 0.31) * 0.28, car.p.z + Math.cos(ang) * r);
+  const gh = heightAt(_cp.x, _cp.z) + 1.6;
+  if (_cp.y < gh) _cp.y = gh;
+  const wide = canvas.width > canvas.height;
+  vset(_cl, car.p.x, car.p.y + (wide ? 0.35 : 1.75), car.p.z);
+  const b = coverBlend * coverBlend * (3 - 2 * coverBlend);
+  cam.p.x = mix(cam.p.x, _cp.x, b); cam.p.y = mix(cam.p.y, _cp.y, b); cam.p.z = mix(cam.p.z, _cp.z, b);
+  cam.look.x = mix(cam.look.x, _cl.x, b); cam.look.y = mix(cam.look.y, _cl.y, b); cam.look.z = mix(cam.look.z, _cl.z, b);
+  cam.fov = mix(cam.fov, 44 * DEG, b);
+}
 const _flat = v3(0, 0, 1), _des = v3(), _lk = v3();
 
 function updateCamera(dt) {
@@ -1694,7 +1866,7 @@ function updateCamera(dt) {
   const sp = vlen(car.v);
 
   if (cam.mode === 1) {                       // cockpit
-    qrot(_des, car.q, vset(_tmp, -0.30, 1.00, 0.18));
+    qrot(_des, car.q, vset(_tmp, 0.40, 0.86, 0.10));
     vadd(_des, car.p, _des);
     vcopy(cam.p, _des);
     vaddScaled(_lk, cam.p, car.fwd, 12);
@@ -1706,7 +1878,7 @@ function updateCamera(dt) {
 
   const aspect = canvas.width / Math.max(1, canvas.height);
   const k = clamp(1 / (0.55 + 0.45 * Math.min(aspect, 1.4)), 1, 1.45);   // pull back when upright
-  const back = (cam.mode === 2 ? 15.5 : 7.9) * k;
+  const back = (cam.mode === 2 ? 16.5 : 8.8) * k;
   const high = (cam.mode === 2 ? 6.4 : 3.05) * (0.6 + 0.4 * k);
   _des.x = car.p.x - _flat.x * back + car.v.x * 0.10;
   _des.y = car.p.y + high;
@@ -1820,6 +1992,17 @@ function readInput(dt) {
   car.hand = Math.max(input.hand, keys['Space'] ? 1 : 0);
 }
 
+/* ---------------- screen wake lock ---------------- */
+let wakeLock = null;
+async function keepAwake() {
+  try {
+    if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+  } catch (e) { /* denied or unsupported — not worth surfacing */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !booting && wakeLock === null) keepAwake();
+});
+
 /* ---------------- audio ---------------- */
 const audio = { ctx: null, on: true, nodes: null };
 function initAudio() {
@@ -1884,7 +2067,7 @@ const PPD = 2.5;
 
 let hudT = 0;
 function updateHud(dt) {
-  const heading = ((Math.atan2(car.fwd.x, car.fwd.z) / DEG) + 360) % 360;
+  const heading = ((Math.atan2(-car.fwd.x, car.fwd.z) / DEG) + 360) % 360;
   hudTape.style.transform = 'translateX(' + (compassEl.clientWidth / 2 - heading * PPD) + 'px)';
   hudSteer.style.transform = 'translateX(' + (car.steerInput * 48 - 1) + 'px)';
   hudFill.style.width = (car.throttle * 100) + '%';
@@ -1902,7 +2085,7 @@ function updateHud(dt) {
     if (d < bd) { bd = d; best = s; }
   }
   if (best) {
-    const b = ((Math.atan2(best.x - car.p.x, best.z - car.p.z) / DEG) + 360) % 360;
+    const b = ((Math.atan2(-(best.x - car.p.x), best.z - car.p.z) / DEG) + 360) % 360;
     hudBearing.textContent = 'WRECK ' + (bd / 1000).toFixed(1) + 'KM · ' +
       String(Math.round(b)).padStart(3, '0') + '°';
   }
@@ -1953,7 +2136,7 @@ function render() {
   gl.drawArrays(gl.TRIANGLES, 0, MESH.car.count);
   for (let i = 0; i < 4; i++) {
     const wl = car.wheels[i];
-    qAxisAngle(_wq2, 0, 1, 0, CARP.mounts[i].steer ? car.steer : 0);
+    qAxisAngle(_wq2, 0, 1, 0, CARP.mounts[i].steer ? -car.steer : 0);
     qAxisAngle(_wq3, 1, 0, 0, wl.spin);
     qmul(_wq, car.q, _wq2);
     qmul(_wq, _wq, _wq3);
@@ -2033,6 +2216,7 @@ let last = performance.now(), acc = 0, booting = true, maxPending = 1, showFps =
 const bootStart = performance.now();
 resize();
 resetCar(true);
+for (let i = 0; i < 260; i++) carStep(1 / 120);   // let the suspension settle for the cover
 vset(cam.look, car.p.x, car.p.y + 1, car.p.z + 5);
 
 const bootEl = el('boot'), barFill = el('bar-fill'), statusEl = el('status'), goBtn = el('go');
@@ -2057,6 +2241,20 @@ function frame(now) {
   }
   updateDust(dt);
   updateCamera(dt);
+  if (coverBlend > 0) {
+    coverCamera((now - bootStart) / 1000);
+    if (!booting) coverBlend = Math.max(0, coverBlend - dt / 1.7);
+  }
+  if (booting) {
+    /* sand streaming across the frame on the wind */
+    if (Math.random() < 0.55) {
+      const a = Math.random() * 6.283, r = 7 + Math.random() * 26;
+      const x = car.p.x + Math.cos(a) * r, z = car.p.z + Math.sin(a) * r;
+      spawnDust(x, heightAt(x, z) + 0.25 + Math.random() * 1.6, z,
+        WDX * (5 + Math.random() * 5), 0.25 + Math.random() * 0.5, WDZ * (5 + Math.random() * 5),
+        1.8 + Math.random() * 1.6, 22 + Math.random() * 34);
+    }
+  }
 
   const aspect = canvas.width / Math.max(1, canvas.height);
   let fov = cam.fov;
@@ -2081,6 +2279,7 @@ function frame(now) {
     const prog = 1 - pendingCount / maxPending;
     barFill.style.width = Math.round(prog * 100) + '%';
     statusEl.textContent = pendingCount ? 'GENERATING TERRAIN · ' + Math.round(prog * 100) + '%' : 'READY';
+    if (frameNo === 3) bootEl.classList.add('lit');     // lift the curtain on the live scene
     if (!ready && (pendingCount === 0 || performance.now() - bootStart > 12000) && frameNo > 3) {
       ready = true;
       goBtn.classList.add('ready');
@@ -2096,9 +2295,11 @@ function start() {
   last = performance.now();
   acc = 0;
   bootEl.classList.add('gone');
+  document.getElementById('hud').classList.add('live');
   setTimeout(() => { bootEl.style.display = 'none'; }, 700);
   initAudio();
   if (audio.ctx && audio.ctx.state === 'suspended') audio.ctx.resume();
+  keepAwake();
   setTimeout(() => { el('hint').style.opacity = '0'; }, 7000);
 }
 goBtn.addEventListener('click', start);

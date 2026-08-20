@@ -12,7 +12,7 @@ every load and on every device.
 
 | | |
 |---|---|
-| Steer | drag anywhere on the left half of the screen |
+| Steer | drag anywhere on the left half of the screen — drag right, turn right |
 | Throttle / brake | GAS / BRK pads, bottom right |
 | Handbrake | HAND pad (landscape only) |
 | Tilt steering | TILT — asks for motion permission on iOS, then steer by tilting |
@@ -47,13 +47,19 @@ Sun visibility is ray-marched against a cheaper version of the field at build
 time and baked into a vertex attribute — that is where the long shadows come
 from, at zero per-frame cost.
 
-**Vehicle** — four downward suspension rays solved by Newton iteration against
-`heightAt`, spring + damper + anti-roll bar per wheel, slip-velocity tyre forces
-clamped to a friction circle scaled by wheel load. Sand has low lateral grip and
-high rolling resistance; the road has both reversed. Tyre forces act about a
-roll centre near the hull rather than at the contact patch, which is what keeps
-a full-lock corner from tipping the buggy. Measured: 0–60 in 3.3 s, 34 m turn
-radius, 64 mph → stopped in 33 m.
+**Vehicle** — a 2.1 t, 2.95 m-wheelbase 4x4. Four downward suspension rays
+solved by Newton iteration against `heightAt`, spring + damper + anti-roll bar
+per wheel, slip-velocity tyre forces clamped to a friction circle scaled by
+wheel load. Sand has low lateral grip and high rolling resistance; the road has
+both reversed. Tyre forces act about a roll centre near the hull rather than at
+the contact patch, which is what keeps a full-lock corner from tipping it, and
+the dampers are asymmetric — stiffer on rebound — so a hard landing is absorbed
+instead of being stored in the spring and fired back out. Measured on a flat
+test pad: 21 m turn radius at 30 mph, 3.2° of body roll, 0–60 in 3.7 s, 65 mph
+→ stopped in 36 m, holds still parked on a 20% slope.
+
+The body is a hand-built low-poly 4-door truck standing in for an imported
+mesh — see *Not done yet*.
 
 **Look** — sand shader with wind-aligned ripple normals, sparse specular
 glitter up close, sky-lit fresnel rim, forward scatter through the crests,
@@ -66,9 +72,23 @@ pylon line with sagging wire running beside the road, and three half-buried
 wrecks placed on the flattest ground near their seed points. Without them an
 infinite desert reads as broken rather than vast.
 
-**Phone-first details** — safe-area insets, `dvh`-safe fixed layout, no
-pull-to-refresh or double-tap zoom, pointer-capture pedals that survive
-multi-touch, aspect-aware FOV plus camera pull-back so portrait framing works,
+**Ramps** — on top of the dune field sits a sparse *kicker* layer: a second
+directional profile with a 78/22 split, so it is nearly all run-up and then a
+hard lip. Measured over 45 s of full-throttle driving, that yields 5–13 jumps
+with 1.4–3.8 s of hangtime. An airborne leveling torque helps you land flat,
+and anything still inverted after 1.9 s is set back on its wheels.
+
+**Cover** — the title screen is the live engine, not a picture: the camera
+orbits the parked truck at the (flattest-ground) spawn while sand streams past
+on the wind, the wordmark rises, and on TAP TO DRIVE the camera blends over to
+the chase view. Cover and HUD are both laid out inside the safe-area insets and
+verified against simulated iPhone notch/home-indicator geometry.
+
+**Phone-first details** — every inset goes through `--sat/--sab/--sal/--sar`,
+so a test can simulate a notched phone and assert that nothing lands outside
+the safe rect. Fixed layout with no pull-to-refresh or double-tap zoom,
+pointer-capture pedals that survive multi-touch, aspect-aware FOV plus camera
+pull-back so portrait framing works, a screen wake lock while driving,
 device-pixel-ratio capped at 2, and an adaptive resolution scale (plus an LOD
 fallback) that reacts to sustained frame time.
 
@@ -82,6 +102,12 @@ Deploying: the repo root is a static site with a single entry point, so Vercel
 (or any static host) needs no configuration.
 
 ## Not done yet
+
+**Importing a real vehicle mesh.** The truck is hand-built from boxes. Dropping
+in an authored model (OBJ/GLB) needs the asset reachable from the build
+environment — a Drive link is not, so commit the model into the repo and it can
+be converted to the engine's interleaved `pos/normal/colour` vertex format,
+which is what `MB.upload()` already consumes.
 
 Terrain deformation from the tyres, other vehicles, weather, and a real
 soft-body sand response. The `road` is a colour-and-grade corridor rather than a
