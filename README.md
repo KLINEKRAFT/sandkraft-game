@@ -47,7 +47,9 @@ Sun visibility is ray-marched against a cheaper version of the field at build
 time and baked into a vertex attribute — that is where the long shadows come
 from, at zero per-frame cost.
 
-**Vehicle** — a 2.1 t, 2.95 m-wheelbase 4x4. Four downward suspension rays
+**Vehicle** — a 2.1 t, 2.95 m-wheelbase Bronco, imported from
+`assets/bronco_engine.glb` (5,399-triangle body + a 500-triangle wheel, flat
+vertex colours, no textures). Four downward suspension rays
 solved by Newton iteration against `heightAt`, spring + damper + anti-roll bar
 per wheel, slip-velocity tyre forces clamped to a friction circle scaled by
 wheel load. Sand has low lateral grip and high rolling resistance; the road has
@@ -58,8 +60,8 @@ instead of being stored in the spring and fired back out. Measured on a flat
 test pad: 21 m turn radius at 30 mph, 3.2° of body roll, 0–60 in 3.7 s, 65 mph
 → stopped in 36 m, holds still parked on a 20% slope.
 
-The body is a hand-built low-poly 4-door truck standing in for an imported
-mesh — see *Not done yet*.
+The procedural box body it replaced is still in `buildCar()` as the fallback
+when no model is imported.
 
 **Look** — sand shader with wind-aligned ripple normals, sparse specular
 glitter up close, sky-lit fresnel rim, forward scatter through the crests,
@@ -98,16 +100,46 @@ fallback) that reacts to sustained frame time.
 open index.html          # or serve the directory, any static host works
 ```
 
+`index.html` is ~370 KB, most of which is the packed vehicle mesh. It is still
+one file with no build step and no runtime fetches.
+
 Deploying: the repo root is a static site with a single entry point, so Vercel
 (or any static host) needs no configuration.
 
-## Not done yet
+## Importing a vehicle mesh
 
-**Importing a real vehicle mesh.** The truck is hand-built from boxes. Dropping
-in an authored model (OBJ/GLB) needs the asset reachable from the build
-environment — a Drive link is not, so commit the model into the repo and it can
-be converted to the engine's interleaved `pos/normal/colour` vertex format,
-which is what `MB.upload()` already consumes.
+The truck in the game is hand-built from boxes, but an authored mesh can replace
+it. Commit the model to `assets/car.glb` (or `.obj`) and run:
+
+```
+node tools/import-model.mjs assets/car.glb
+node tools/verify-model.mjs .          # renders it, checks it sits on its wheels
+```
+
+The car currently in the game was imported with:
+
+```
+node tools/import-model.mjs assets/bronco_engine.glb --as-is --track=1.64
+```
+
+`--as-is` is for a model already authored in the engine's body space (+Z
+forward, +Y up, origin at the axle midpoint over the rest contact plane): it
+takes the geometry verbatim and only reads the suspension numbers back off the
+wheel mesh, rather than reorienting and rescaling something that was already on
+its marks. Everything else gets the full fit.
+
+The importer parses glTF/GLB or OBJ+MTL with no dependencies, recovers the
+orientation (from the wheel layout when the wheels are named, otherwise from the
+bounding box), fits the model to the suspension geometry, decimates to a
+triangle budget by vertex clustering, and packs it as int16 positions / int8
+normals / uint8 colour — which decodes to exactly the interleaved layout
+`MB.upload()` already consumes, so the renderer needs no special case.
+
+See `assets/README.md` for the Blender export settings and the wheel naming
+convention. `tools/make-test-car.mjs` writes a fixture in both formats so the
+path can be verified without an authored asset.
+
+## Not done yet
 
 Terrain deformation from the tyres, other vehicles, weather, and a real
 soft-body sand response. The `road` is a colour-and-grade corridor rather than a
