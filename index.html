@@ -1,0 +1,2129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SANDKRAFT">
+<meta name="theme-color" content="#000000">
+<meta name="description" content="SANDKRAFT — a static procedural desert you can drive. Single file, no build step.">
+<title>SANDKRAFT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:#84b4dd;
+  --accent-dim:#4e7ba6;
+  --steel:#6e90ae;
+  --dim:#54687c;
+  --panel:rgba(132,180,221,.07);
+  --line:rgba(132,180,221,.22);
+  --hud-pad:14px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;height:100%;width:100%;background:#000;overflow:hidden;position:fixed;}
+body{
+  font-family:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color:#c6d8e8;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  touch-action:none;overscroll-behavior:none;overscroll-behavior-y:none;
+}
+canvas#gl{position:fixed;top:0;left:0;width:100%;height:100%;display:block;background:#000;}
+
+#hud{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;
+  font-size:11px;letter-spacing:.09em;text-transform:uppercase;}
+.pad{position:absolute;}
+
+/* ---- compass ---- */
+#compass{top:calc(env(safe-area-inset-top) + 8px);left:50%;transform:translateX(-50%);
+  width:min(52vw,320px);height:26px;overflow:hidden;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);}
+#tape{position:absolute;top:0;left:0;height:100%;will-change:transform;}
+#tape i{position:absolute;top:14px;width:1px;height:6px;background:var(--line);}
+#tape b{position:absolute;top:0;font-weight:500;font-size:10px;color:var(--steel);
+  transform:translateX(-50%);letter-spacing:.12em;}
+#tape b.card{color:var(--accent);}
+#tape i.major{top:10px;height:10px;background:rgba(132,180,221,.45);}
+#needle{position:absolute;left:50%;top:0;width:1px;height:26px;background:var(--accent);
+  box-shadow:0 0 6px rgba(132,180,221,.8);}
+#bearing{top:calc(env(safe-area-inset-top) + 34px);left:50%;transform:translateX(-50%);
+  font-size:10px;color:var(--dim);}
+
+/* ---- speed ---- */
+#speedbox{left:calc(env(safe-area-inset-left) + var(--hud-pad));bottom:calc(env(safe-area-inset-bottom) + var(--hud-pad));
+  display:flex;align-items:flex-end;gap:6px;}
+#speed{font-size:54px;line-height:.82;font-weight:500;color:#eaf3fb;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;text-shadow:0 0 22px rgba(132,180,221,.25);}
+#unit{font-size:10px;color:var(--dim);padding-bottom:6px;}
+#gauge{left:calc(env(safe-area-inset-left) + var(--hud-pad));bottom:calc(env(safe-area-inset-bottom) + var(--hud-pad) + 60px);
+  width:132px;height:3px;background:rgba(132,180,221,.13);}
+#gauge>span{display:block;height:100%;width:0%;background:var(--accent);box-shadow:0 0 8px rgba(132,180,221,.6);
+  transition:width .06s linear;}
+#tele{left:calc(env(safe-area-inset-left) + var(--hud-pad));bottom:calc(env(safe-area-inset-bottom) + var(--hud-pad) + 74px);
+  font-size:10px;color:var(--dim);line-height:1.7;}
+#tele span{color:var(--steel);}
+
+/* ---- steer readout ---- */
+#steerbar{left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 10px);
+  width:min(38vw,220px);height:2px;background:rgba(132,180,221,.13);}
+#steerbar>i{position:absolute;top:-3px;left:50%;width:2px;height:8px;background:var(--accent);
+  transform:translateX(-50%);box-shadow:0 0 8px rgba(132,180,221,.7);}
+#steerbar>u{position:absolute;top:-6px;left:50%;width:1px;height:14px;background:rgba(132,180,221,.25);}
+
+/* ---- buttons ---- */
+#tools{top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + var(--hud-pad));
+  display:flex;gap:6px;pointer-events:auto;}
+.tool{pointer-events:auto;padding:7px 9px;font:inherit;font-size:9.5px;letter-spacing:.1em;
+  color:var(--steel);background:var(--panel);border:1px solid var(--line);border-radius:3px;
+  text-transform:uppercase;}
+.tool.on{color:#04111c;background:var(--accent);border-color:var(--accent);}
+
+/* ---- pedals ---- */
+#gas,#brk{pointer-events:auto;position:absolute;right:calc(env(safe-area-inset-right) + var(--hud-pad));
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--line);background:var(--panel);color:var(--steel);
+  font-size:10px;letter-spacing:.12em;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+#gas{width:104px;height:104px;bottom:calc(env(safe-area-inset-bottom) + 22px);}
+#brk{width:74px;height:74px;bottom:calc(env(safe-area-inset-bottom) + 138px);right:calc(env(safe-area-inset-right) + var(--hud-pad) + 16px);}
+#gas.hit,#brk.hit{background:rgba(132,180,221,.30);color:#eaf3fb;border-color:var(--accent);
+  box-shadow:0 0 26px rgba(132,180,221,.28) inset;}
+#hbk{pointer-events:auto;position:absolute;right:calc(env(safe-area-inset-right) + var(--hud-pad) + 112px);
+  bottom:calc(env(safe-area-inset-bottom) + 30px);width:58px;height:58px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;border:1px solid var(--line);
+  background:var(--panel);color:var(--dim);font-size:9px;letter-spacing:.1em;}
+#hbk.hit{background:rgba(221,140,132,.28);color:#ffe6e0;border-color:rgba(221,140,132,.7);}
+
+/* ---- steering stick ---- */
+#stick{position:absolute;width:132px;height:36px;margin:-18px 0 0 -66px;border:1px solid var(--line);
+  border-radius:18px;background:rgba(4,10,16,.45);opacity:0;transition:opacity .12s;pointer-events:none;}
+#stick.on{opacity:1;}
+#stick>i{position:absolute;top:50%;left:50%;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;
+  background:rgba(132,180,221,.5);box-shadow:0 0 16px rgba(132,180,221,.5);}
+
+#hint{position:absolute;top:calc(env(safe-area-inset-top) + 52px);left:50%;transform:translateX(-50%);
+  font-size:9px;color:rgba(84,104,124,.8);white-space:nowrap;transition:opacity 1.2s ease;}
+#fps{top:calc(env(safe-area-inset-top) + 8px);left:calc(env(safe-area-inset-left) + var(--hud-pad));
+  font-size:9.5px;color:var(--dim);}
+
+/* ---- boot ---- */
+#boot{position:fixed;inset:0;z-index:30;background:#000;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:18px;text-align:center;padding:24px;
+  transition:opacity .55s ease;}
+#boot.gone{opacity:0;pointer-events:none;}
+#title{font-size:clamp(30px,9vw,58px);font-weight:600;letter-spacing:.34em;margin-left:.34em;color:#eaf3fb;}
+#sub{font-size:10px;letter-spacing:.26em;color:var(--steel);}
+#bar{width:min(62vw,300px);height:2px;background:rgba(132,180,221,.14);}
+#bar>span{display:block;height:100%;width:0%;background:var(--accent);transition:width .2s;}
+#status{font-size:9.5px;color:var(--dim);letter-spacing:.2em;height:12px;}
+#go{pointer-events:auto;margin-top:6px;padding:14px 28px;font:inherit;font-size:11px;letter-spacing:.24em;
+  color:#04111c;background:var(--accent);border:0;border-radius:3px;opacity:0;transition:opacity .4s;
+  text-transform:uppercase;}
+#go.ready{opacity:1;}
+#legal{position:absolute;bottom:calc(env(safe-area-inset-bottom) + 14px);font-size:8.5px;color:#26333f;letter-spacing:.2em;}
+
+@media (orientation:portrait) and (max-width:520px){
+  #compass{top:calc(env(safe-area-inset-top) + 46px);width:min(78vw,300px);}
+  #bearing{top:calc(env(safe-area-inset-top) + 72px);}
+  #hint{top:calc(env(safe-area-inset-top) + 90px);white-space:normal;width:80vw;text-align:center;line-height:1.6;}
+  #tools{left:calc(env(safe-area-inset-left) + var(--hud-pad));right:auto;}
+  #fps{top:calc(env(safe-area-inset-top) + 46px);left:auto;right:calc(env(safe-area-inset-right) + var(--hud-pad));}
+  #speed{font-size:44px;}
+  #gas{width:92px;height:92px;}
+  #brk{width:66px;height:66px;bottom:calc(env(safe-area-inset-bottom) + 126px);}
+  #hbk{display:none;}
+  #hint{font-size:8px;}
+}
+@media (min-width:900px){ #gas,#brk,#hbk{display:none;} }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud">
+  <div class="pad" id="fps"></div>
+  <div class="pad" id="compass"><div id="tape"></div><div id="needle"></div></div>
+  <div class="pad" id="bearing">—</div>
+
+  <div class="pad" id="tele">
+    ALT <span id="t-alt">0</span> M &nbsp; GRADE <span id="t-grade">0</span>%<br>
+    SURF <span id="t-surf">SAND</span> &nbsp; DIST <span id="t-dist">0.0</span> KM
+  </div>
+  <div class="pad" id="gauge"><span id="g-fill"></span></div>
+  <div class="pad" id="speedbox"><div id="speed">0</div><div id="unit">MPH</div></div>
+  <div class="pad" id="steerbar"><u></u><i></i></div>
+
+  <div class="pad" id="tools">
+    <button class="tool" id="b-cam">CAM</button>
+    <button class="tool" id="b-tilt">TILT</button>
+    <button class="tool" id="b-aud">AUD</button>
+    <button class="tool" id="b-res">RESET</button>
+  </div>
+
+  <div id="gas">GAS</div>
+  <div id="brk">BRK</div>
+  <div id="hbk">HAND</div>
+  <div id="stick"><i></i></div>
+  <div id="hint">DRAG THE LEFT HALF TO STEER · HOLD GAS · WASD ON A KEYBOARD</div>
+</div>
+
+<div id="boot">
+  <div id="title">SANDKRAFT</div>
+  <div id="sub">SEED 1337 · STATIC DESERT</div>
+  <div id="bar"><span id="bar-fill"></span></div>
+  <div id="status">BOOTING</div>
+  <button id="go">TAP TO DRIVE</button>
+  <div id="legal">WEBGL2 · SINGLE FILE · NO BUILD STEP</div>
+</div>
+
+<script>
+"use strict";
+/* =========================================================================
+   SANDKRAFT — static procedural desert, single file, no build step.
+   0  math                       4  props / landmarks
+   1  noise + terrain field      5  vehicle (raycast suspension)
+   2  gl plumbing + shaders      6  camera / input / hud / audio
+   3  chunked quadtree LOD       7  main loop
+   ========================================================================= */
+
+/* ---------------------------------------------------------------- 0 math */
+const clamp = (x, a, b) => x < a ? a : (x > b ? b : x);
+const mix = (a, b, t) => a + (b - a) * t;
+function smoothstep(e0, e1, x) {
+  const t = clamp((x - e0) / (e1 - e0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+const DEG = Math.PI / 180;
+
+const v3 = (x = 0, y = 0, z = 0) => ({ x, y, z });
+function vset(o, x, y, z) { o.x = x; o.y = y; o.z = z; return o; }
+function vcopy(o, a) { o.x = a.x; o.y = a.y; o.z = a.z; return o; }
+function vadd(o, a, b) { o.x = a.x + b.x; o.y = a.y + b.y; o.z = a.z + b.z; return o; }
+function vsub(o, a, b) { o.x = a.x - b.x; o.y = a.y - b.y; o.z = a.z - b.z; return o; }
+function vaddScaled(o, a, b, s) { o.x = a.x + b.x * s; o.y = a.y + b.y * s; o.z = a.z + b.z * s; return o; }
+function vscale(o, a, s) { o.x = a.x * s; o.y = a.y * s; o.z = a.z * s; return o; }
+function vdot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+function vcross(o, a, b) {
+  const x = a.y * b.z - a.z * b.y, y = a.z * b.x - a.x * b.z, z = a.x * b.y - a.y * b.x;
+  o.x = x; o.y = y; o.z = z; return o;
+}
+function vlen(a) { return Math.hypot(a.x, a.y, a.z); }
+function vnorm(o, a) {
+  const l = Math.hypot(a.x, a.y, a.z) || 1, i = 1 / l;
+  o.x = a.x * i; o.y = a.y * i; o.z = a.z * i; return o;
+}
+
+/* quaternion {x,y,z,w} */
+function qid() { return { x: 0, y: 0, z: 0, w: 1 }; }
+function qmul(o, a, b) {
+  const x = a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y;
+  const y = a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x;
+  const z = a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w;
+  const w = a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z;
+  o.x = x; o.y = y; o.z = z; o.w = w; return o;
+}
+function qnorm(q) {
+  const l = Math.hypot(q.x, q.y, q.z, q.w) || 1, i = 1 / l;
+  q.x *= i; q.y *= i; q.z *= i; q.w *= i; return q;
+}
+function qAxisAngle(o, ax, ay, az, ang) {
+  const s = Math.sin(ang * 0.5);
+  o.x = ax * s; o.y = ay * s; o.z = az * s; o.w = Math.cos(ang * 0.5); return o;
+}
+/* rotate vector by quat */
+function qrot(o, q, v) {
+  const ix = q.w * v.x + q.y * v.z - q.z * v.y;
+  const iy = q.w * v.y + q.z * v.x - q.x * v.z;
+  const iz = q.w * v.z + q.x * v.y - q.y * v.x;
+  const iw = -q.x * v.x - q.y * v.y - q.z * v.z;
+  o.x = ix * q.w + iw * -q.x + iy * -q.z - iz * -q.y;
+  o.y = iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z;
+  o.z = iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x;
+  return o;
+}
+/* inverse rotate */
+function qrotInv(o, q, v) {
+  const c = { x: -q.x, y: -q.y, z: -q.z, w: q.w };
+  return qrot(o, c, v);
+}
+/* integrate quat by world angular velocity w for dt */
+function qIntegrate(q, w, dt) {
+  const dq = {
+    x: (w.x * q.w + w.y * q.z - w.z * q.y) * 0.5 * dt,
+    y: (w.y * q.w + w.z * q.x - w.x * q.z) * 0.5 * dt,
+    z: (w.z * q.w + w.x * q.y - w.y * q.x) * 0.5 * dt,
+    w: (-w.x * q.x - w.y * q.y - w.z * q.z) * 0.5 * dt
+  };
+  q.x += dq.x; q.y += dq.y; q.z += dq.z; q.w += dq.w;
+  return qnorm(q);
+}
+
+/* mat4, column-major Float32Array(16) */
+function m4() { const m = new Float32Array(16); m[0] = m[5] = m[10] = m[15] = 1; return m; }
+function m4Perspective(o, fovy, aspect, near, far) {
+  const f = 1 / Math.tan(fovy * 0.5), nf = 1 / (near - far);
+  o[0] = f / aspect; o[1] = 0; o[2] = 0; o[3] = 0;
+  o[4] = 0; o[5] = f; o[6] = 0; o[7] = 0;
+  o[8] = 0; o[9] = 0; o[10] = (far + near) * nf; o[11] = -1;
+  o[12] = 0; o[13] = 0; o[14] = 2 * far * near * nf; o[15] = 0;
+  return o;
+}
+const _z = v3(), _x = v3(), _y = v3(), _t = v3();
+function m4LookAt(o, eye, center, up) {
+  vnorm(_z, vsub(_z, eye, center));
+  vnorm(_x, vcross(_x, up, _z));
+  vcross(_y, _z, _x);
+  o[0] = _x.x; o[1] = _y.x; o[2] = _z.x; o[3] = 0;
+  o[4] = _x.y; o[5] = _y.y; o[6] = _z.y; o[7] = 0;
+  o[8] = _x.z; o[9] = _y.z; o[10] = _z.z; o[11] = 0;
+  o[12] = -vdot(_x, eye); o[13] = -vdot(_y, eye); o[14] = -vdot(_z, eye); o[15] = 1;
+  return o;
+}
+function m4Mul(o, a, b) {
+  for (let c = 0; c < 4; c++) {
+    const b0 = b[c * 4], b1 = b[c * 4 + 1], b2 = b[c * 4 + 2], b3 = b[c * 4 + 3];
+    o[c * 4] = a[0] * b0 + a[4] * b1 + a[8] * b2 + a[12] * b3;
+    o[c * 4 + 1] = a[1] * b0 + a[5] * b1 + a[9] * b2 + a[13] * b3;
+    o[c * 4 + 2] = a[2] * b0 + a[6] * b1 + a[10] * b2 + a[14] * b3;
+    o[c * 4 + 3] = a[3] * b0 + a[7] * b1 + a[11] * b2 + a[15] * b3;
+  }
+  return o;
+}
+function m4Invert(o, m) {
+  const a00 = m[0], a01 = m[1], a02 = m[2], a03 = m[3],
+        a10 = m[4], a11 = m[5], a12 = m[6], a13 = m[7],
+        a20 = m[8], a21 = m[9], a22 = m[10], a23 = m[11],
+        a30 = m[12], a31 = m[13], a32 = m[14], a33 = m[15];
+  const b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10,
+        b03 = a01 * a12 - a02 * a11, b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12,
+        b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30, b08 = a20 * a33 - a23 * a30,
+        b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+  let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+  if (!det) return o;
+  det = 1 / det;
+  o[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
+  o[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+  o[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det;
+  o[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+  o[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det;
+  o[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+  o[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det;
+  o[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+  o[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det;
+  o[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+  o[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
+  o[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+  o[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det;
+  o[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+  o[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
+  o[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+  return o;
+}
+/* model matrix from quat + position */
+function m4FromQuatPos(o, q, p) {
+  const x = q.x, y = q.y, z = q.z, w = q.w;
+  const x2 = x + x, y2 = y + y, z2 = z + z;
+  const xx = x * x2, xy = x * y2, xz = x * z2;
+  const yy = y * y2, yz = y * z2, zz = z * z2;
+  const wx = w * x2, wy = w * y2, wz = w * z2;
+  o[0] = 1 - (yy + zz); o[1] = xy + wz; o[2] = xz - wy; o[3] = 0;
+  o[4] = xy - wz; o[5] = 1 - (xx + zz); o[6] = yz + wx; o[7] = 0;
+  o[8] = xz + wy; o[9] = yz - wx; o[10] = 1 - (xx + yy); o[11] = 0;
+  o[12] = p.x; o[13] = p.y; o[14] = p.z; o[15] = 1;
+  return o;
+}
+/* frustum planes from viewProj (a,b,c,d) with normals pointing inward */
+function frustumFrom(m, out) {
+  const p = [
+    [m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12]],
+    [m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12]],
+    [m[3] + m[1], m[7] + m[5], m[11] + m[9], m[15] + m[13]],
+    [m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13]],
+    [m[3] + m[2], m[7] + m[6], m[11] + m[10], m[15] + m[14]],
+    [m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14]]
+  ];
+  for (let i = 0; i < 6; i++) {
+    const q = p[i], l = Math.hypot(q[0], q[1], q[2]) || 1;
+    out[i * 4] = q[0] / l; out[i * 4 + 1] = q[1] / l; out[i * 4 + 2] = q[2] / l; out[i * 4 + 3] = q[3] / l;
+  }
+  return out;
+}
+function aabbInFrustum(fr, x0, y0, z0, x1, y1, z1) {
+  for (let i = 0; i < 6; i++) {
+    const a = fr[i * 4], b = fr[i * 4 + 1], c = fr[i * 4 + 2], d = fr[i * 4 + 3];
+    const px = a > 0 ? x1 : x0, py = b > 0 ? y1 : y0, pz = c > 0 ? z1 : z0;
+    if (a * px + b * py + c * pz + d < 0) return false;
+  }
+  return true;
+}
+
+/* ------------------------------------------- 1 noise + terrain field ---- */
+const SEED = 1337;
+
+function hash2(ix, iz) {
+  let h = Math.imul(ix | 0, 0x27d4eb2d) ^ Math.imul(iz | 0, 0x165667b1) ^ SEED;
+  h = Math.imul(h ^ (h >>> 15), 0x2545f491);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0x27d4eb2d);
+  h ^= h >>> 16;
+  return (h >>> 0) * 2.3283064365386963e-10;
+}
+/* value noise, quintic interpolation */
+function vnoise2(x, z) {
+  const x0 = Math.floor(x), z0 = Math.floor(z);
+  const fx = x - x0, fz = z - z0;
+  const ux = fx * fx * fx * (fx * (fx * 6 - 15) + 10);
+  const uz = fz * fz * fz * (fz * (fz * 6 - 15) + 10);
+  const a = hash2(x0, z0), b = hash2(x0 + 1, z0), c = hash2(x0, z0 + 1), d = hash2(x0 + 1, z0 + 1);
+  return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+}
+/* fbm with per-octave rotation to kill axis alignment */
+function fbm(x, z, oct) {
+  let sum = 0, amp = 0.5, norm = 0;
+  for (let i = 0; i < oct; i++) {
+    sum += amp * vnoise2(x, z);
+    norm += amp;
+    amp *= 0.5;
+    const nx = 1.6 * (0.8 * x + 0.6 * z) + 37.1;
+    const nz = 1.6 * (-0.6 * x + 0.8 * z) + 11.7;
+    x = nx; z = nz;
+  }
+  return sum / norm;
+}
+
+/* dune direction (crests run perpendicular to this) */
+const WIND_A = 0.55;
+const WDX = Math.cos(WIND_A), WDZ = Math.sin(WIND_A);
+const WIND_B = WIND_A + 0.32;
+const WBX = Math.cos(WIND_B), WBZ = Math.sin(WIND_B);
+const DUNE_L = 160, DUNE_K = 0.68;
+
+/* asymmetric dune profile: long windward rise, short steep lee slip face */
+function duneProfile(f) {
+  if (f < DUNE_K) return 0.5 - 0.5 * Math.cos(Math.PI * f / DUNE_K);
+  return 0.5 + 0.5 * Math.cos(Math.PI * (f - DUNE_K) / (1 - DUNE_K));
+}
+const fract = x => x - Math.floor(x);
+
+/* broad swells only — also the road's grade profile */
+function baseSwell(x, z) {
+  return (fbm(x * 0.00075, z * 0.00075, 4) - 0.5) * 132;
+}
+/* the road: gently wandering line running roughly north-south */
+function roadCenterX(z) {
+  return 132 * Math.sin(z * 0.00055) + 58 * Math.sin(z * 0.00017 + 2.1);
+}
+function roadBase(z) { return baseSwell(roadCenterX(z), z) + 0.9; }
+/* 1 on the packed surface, 0 off it */
+function roadness(x, z) {
+  return 1 - smoothstep(5.0, 10.5, Math.abs(x - roadCenterX(z)));
+}
+
+/* full terrain height — the single source of truth for mesh AND physics */
+function heightAt(x, z) {
+  const base = baseSwell(x, z);
+  const mask = smoothstep(0.30, 0.52, fbm(x * 0.0006 + 41.3, z * 0.0006 - 17.7, 3));
+
+  const s = x * WDX + z * WDZ;
+  const t = -x * WDZ + z * WDX;
+  const warp = (fbm(x * 0.0021 + 7.1, z * 0.0021 + 3.3, 2) - 0.5) * 2.2;
+  const phase = s / DUNE_L + warp + (vnoise2(t * 0.0032, s * 0.0011) - 0.5) * 1.5;
+  const amp = mask * (14 + 17 * fbm(x * 0.0013 + 21.5, z * 0.0013 + 5.5, 2));
+  let h = base + amp * duneProfile(fract(phase));
+
+  /* secondary transverse dunes riding on the primaries */
+  const s2 = x * WBX + z * WBZ;
+  const ph2 = s2 / 46 + (fbm(x * 0.0062 + 13.7, z * 0.0062 - 4.1, 2) - 0.5) * 2.0;
+  h += 3.6 * mask * duneProfile(fract(ph2));
+
+  /* graded road corridor cut through the field */
+  const dr = Math.abs(x - roadCenterX(z));
+  if (dr < 46) {
+    const w = smoothstep(46, 13, dr);
+    h += (roadBase(z) - h) * (w * 0.93);
+  }
+  return h;
+}
+/* cheaper field used for baking sun shadows */
+function heightCoarse(x, z) {
+  const base = baseSwell(x, z);
+  const mask = smoothstep(0.30, 0.52, fbm(x * 0.0006 + 41.3, z * 0.0006 - 17.7, 2));
+  const s = x * WDX + z * WDZ;
+  const t = -x * WDZ + z * WDX;
+  const warp = (fbm(x * 0.0021 + 7.1, z * 0.0021 + 3.3, 2) - 0.5) * 2.2;
+  const phase = s / DUNE_L + warp + (vnoise2(t * 0.0032, s * 0.0011) - 0.5) * 1.5;
+  const amp = mask * (14 + 17 * fbm(x * 0.0013 + 21.5, z * 0.0013 + 5.5, 2));
+  let h = base + amp * duneProfile(fract(phase));
+  const dr = Math.abs(x - roadCenterX(z));
+  if (dr < 46) h += (roadBase(z) - h) * (smoothstep(46, 13, dr) * 0.93);
+  return h;
+}
+
+/* terrain normal, analytic-ish central difference (physics) */
+function normalAt(out, x, z, eps) {
+  eps = eps || 0.6;
+  const hl = heightAt(x - eps, z), hr = heightAt(x + eps, z);
+  const hd = heightAt(x, z - eps), hu = heightAt(x, z + eps);
+  return vnorm(out, vset(out, hl - hr, 2 * eps, hd - hu));
+}
+
+/* sun */
+const SUN_EL = 16 * DEG, SUN_BEAR = 245 * DEG;   // low and raking across the dune field
+const SUN_HX = Math.sin(SUN_BEAR), SUN_HZ = Math.cos(SUN_BEAR);
+const SUN = v3(Math.cos(SUN_EL) * SUN_HX, Math.sin(SUN_EL), Math.cos(SUN_EL) * SUN_HZ);
+const SUN_TAN = Math.tan(SUN_EL);
+
+/* baked sun visibility: march the coarse field toward the sun */
+const SHADOW_STEPS = [2, 5, 9, 15, 24, 38, 58, 88];
+function sunVis(x, y, z) {
+  let v = 1;
+  for (let i = 0; i < SHADOW_STEPS.length; i++) {
+    const d = SHADOW_STEPS[i];
+    const ray = y + d * SUN_TAN;
+    const th = heightCoarse(x + SUN_HX * d, z + SUN_HZ * d);
+    const s = smoothstep(-0.6 - d * 0.05, 1.0 + d * 0.09, ray - th);
+    if (s < v) v = s;
+    if (v <= 0.001) break;
+  }
+  return v;
+}
+
+/* ------------------------------------------- 2 gl plumbing + shaders ---- */
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', {
+  alpha: false, antialias: false, depth: true, stencil: false,
+  powerPreference: 'high-performance', preserveDrawingBuffer: false,
+  failIfMajorPerformanceCaveat: false
+});
+if (!gl) {
+  document.getElementById('status').textContent = 'WEBGL2 NOT AVAILABLE';
+  throw new Error('webgl2 unavailable');
+}
+
+function shader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(s);
+    console.error(log, src.split('\n').map((l, i) => (i + 1) + ': ' + l).join('\n'));
+    throw new Error('shader compile: ' + log);
+  }
+  return s;
+}
+function program(vsSrc, fsSrc, name) {
+  const p = gl.createProgram();
+  gl.attachShader(p, shader(gl.VERTEX_SHADER, vsSrc));
+  gl.attachShader(p, shader(gl.FRAGMENT_SHADER, fsSrc));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(name + ' link: ' + gl.getProgramInfoLog(p));
+  const u = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) {
+    const info = gl.getActiveUniform(p, i);
+    u[info.name.replace('[0]', '')] = gl.getUniformLocation(p, info.name);
+  }
+  return { p, u, name };
+}
+
+const VERSION = '#version 300 es\n';
+
+/* shared fragment header: sky model, fog, tonemap */
+const COMMON = `
+precision highp float;
+uniform vec3 uCamPos;
+uniform vec3 uSunDir;
+uniform float uFogD;
+uniform float uExposure;
+
+const vec3 SUN_COL = vec3(1.00, 0.80, 0.56);
+
+float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float n21(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x),
+             mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+vec3 skyColor(vec3 d){
+  float h = clamp(d.y, -0.35, 1.0);
+  float t = pow(clamp(1.0 - h, 0.0, 1.0), 3.2);
+  vec3 zenith  = vec3(0.09, 0.21, 0.47);
+  vec3 horizon = vec3(0.74, 0.61, 0.47);
+  vec3 c = mix(zenith, horizon, t);
+  float sd = max(dot(d, uSunDir), 0.0);
+  c += vec3(0.95, 0.48, 0.20) * pow(sd, 5.0) * 0.55;
+  c += vec3(1.00, 0.72, 0.42) * pow(sd, 60.0) * 0.85;
+  c = mix(c, vec3(0.62, 0.52, 0.42), smoothstep(0.0, -0.22, d.y));
+  return c;
+}
+vec3 aces(vec3 x){
+  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+/* fog toward the sky colour in the view direction, then tonemap + gamma */
+vec3 finish(vec3 col, vec3 dirToFrag, float dist){
+  float f = 1.0 - exp(-pow(dist * uFogD, 2.0));
+  col = mix(col, skyColor(dirToFrag), f);
+  col = pow(aces(col * uExposure), vec3(1.0 / 2.2));
+  col += (h21(gl_FragCoord.xy) - 0.5) * 0.0035;
+  return col;
+}
+`;
+
+/* ---- sky ---- */
+const SKY_VS = VERSION + `
+out vec2 vNdc;
+void main(){
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  vNdc = p * 2.0 - 1.0;
+  gl_Position = vec4(vNdc, 1.0, 1.0);
+}`;
+const SKY_FS = VERSION + COMMON + `
+in vec2 vNdc;
+uniform mat4 uInvVP;
+out vec4 outColor;
+void main(){
+  vec4 far = uInvVP * vec4(vNdc, 1.0, 1.0);
+  vec3 d = normalize(far.xyz / far.w - uCamPos);
+  vec3 c = skyColor(d);
+  float sd = dot(d, uSunDir);
+  c += vec3(1.0, 0.86, 0.68) * smoothstep(0.99965, 0.99992, sd) * 7.0;
+  /* thin dust band low in the sky */
+  c = mix(c, vec3(0.76, 0.63, 0.48), smoothstep(0.09, -0.01, d.y) * 0.32);
+  c += (n21(d.xz * 40.0 + d.y * 13.0) - 0.5) * 0.012;
+  outColor = vec4(pow(aces(c * uExposure), vec3(1.0 / 2.2)), 1.0);
+}`;
+
+/* ---- terrain ---- */
+const TERRAIN_VS = VERSION + `
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in float aShade;
+layout(location=3) in float aRoad;
+uniform mat4 uViewProj;
+uniform vec3 uOrigin;
+uniform vec3 uCamPos;
+out vec3 vWorld; out vec3 vNrm; out float vShade; out float vRoad; out float vDist;
+void main(){
+  vec3 w = aPos + uOrigin;
+  vWorld = w; vNrm = aNrm; vShade = aShade; vRoad = aRoad;
+  vDist = length(w - uCamPos);
+  gl_Position = uViewProj * vec4(w, 1.0);
+}`;
+const TERRAIN_FS = VERSION + COMMON + `
+in vec3 vWorld; in vec3 vNrm; in float vShade; in float vRoad; in float vDist;
+uniform vec2 uWind;
+out vec4 outColor;
+
+float ripple(vec2 p){
+  float s = dot(p, uWind);
+  float w = s * 5.0 + n21(p * 0.07) * 7.5 + n21(p * 0.011) * 15.0;
+  return pow(sin(w) * 0.5 + 0.5, 1.7);
+}
+
+void main(){
+  vec3 N = normalize(vNrm);
+  vec3 toCam = uCamPos - vWorld;
+  float dist = length(toCam);
+  vec3 V = toCam / max(dist, 0.001);
+  vec2 p = vWorld.xz;
+
+  float detail = (1.0 - smoothstep(26.0, 140.0, dist)) * (0.35 + 0.9 * n21(p * 0.006));
+  float slip = smoothstep(0.92, 0.60, N.y);
+  float drift = n21(p * 0.085) * 0.62 + n21(p * 0.42) * 0.38;
+  float road = vRoad * mix(0.5, 1.0, smoothstep(0.32, 0.66, drift));
+  float rAmp = detail * (1.0 - slip * 0.8) * (1.0 - road * 0.85);
+
+  float r0 = ripple(p);
+  if (rAmp > 0.01) {
+    float e = 0.28;
+    float gx = (ripple(p + vec2(e, 0.0)) - r0) / e;
+    float gz = (ripple(p + vec2(0.0, e)) - r0) / e;
+    N = normalize(N + vec3(-gx, 0.0, -gz) * 0.030 * rAmp);
+  }
+
+  vec3 sandLit  = vec3(0.80, 0.51, 0.25);
+  vec3 sandDeep = vec3(0.52, 0.33, 0.17);
+  vec3 roadCol  = vec3(0.31, 0.26, 0.20);
+  vec3 albedo = mix(sandLit, sandDeep, slip * 0.52 + r0 * 0.05 * rAmp);
+  albedo = mix(albedo, roadCol, road);
+
+  float shade = 0.20 + 0.80 * mix(vShade, 1.0, smoothstep(240.0, 430.0, dist));
+  float ndl = dot(N, uSunDir);
+  float sun = clamp((ndl + 0.18) / 1.18, 0.0, 1.0) * shade;
+
+  vec3 skyAmb = vec3(0.34, 0.47, 0.72);
+  vec3 amb = skyAmb * (0.26 + 0.24 * max(N.y, 0.0)) + vec3(0.44, 0.28, 0.15) * 0.20;
+  vec3 col = albedo * (SUN_COL * 2.60 * sun + amb) + skyAmb * 0.055 * (1.0 - sun * 0.85);
+
+  float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
+  col += skyAmb * fres * 0.30 * (1.0 - road);
+  col += SUN_COL * pow(max(dot(V, -uSunDir), 0.0), 5.0) * 0.12 * shade;
+
+  float gf = (1.0 - smoothstep(2.0, 24.0, dist)) * (1.0 - road);
+  if (gf > 0.005) {
+    vec2 cell = floor(p * 52.0);
+    if (h21(cell + 3.7) > 0.80) {
+      vec3 gn = normalize(N + (vec3(h21(cell), h21(cell + 11.3), h21(cell + 29.7)) - 0.5) * 1.6);
+      vec3 H = normalize(uSunDir + V);
+      col += SUN_COL * pow(max(dot(gn, H), 0.0), 170.0) * 2.0 * gf * shade;
+    }
+  }
+
+  outColor = vec4(finish(col, -V, dist), 1.0);
+}`;
+
+/* ---- shared mesh fragment (props, car, wreck) ---- */
+const MESH_FS = VERSION + COMMON + `
+in vec3 vWorld; in vec3 vNrm; in vec3 vCol;
+out vec4 outColor;
+void main(){
+  vec3 N = normalize(vNrm);
+  vec3 toCam = uCamPos - vWorld;
+  float dist = length(toCam);
+  vec3 V = toCam / max(dist, 0.001);
+  float sun = clamp((dot(N, uSunDir) + 0.12) / 1.12, 0.0, 1.0);
+  vec3 skyAmb = vec3(0.34, 0.47, 0.72);
+  vec3 amb = skyAmb * (0.20 + 0.22 * max(N.y, 0.0)) + vec3(0.42, 0.28, 0.16) * 0.14;
+  vec3 col = vCol * (SUN_COL * 2.40 * sun + amb) + skyAmb * 0.09;
+  vec3 H = normalize(uSunDir + V);
+  col += SUN_COL * pow(max(dot(N, H), 0.0), 26.0) * 0.22 * sun;
+  col += skyAmb * pow(1.0 - max(dot(N, V), 0.0), 4.0) * 0.22;
+  outColor = vec4(finish(col, -V, dist), 1.0);
+}`;
+
+const MESH_VS = VERSION + `
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec3 aCol;
+uniform mat4 uViewProj;
+uniform mat4 uModel;
+out vec3 vWorld; out vec3 vNrm; out vec3 vCol;
+void main(){
+  vec4 w = uModel * vec4(aPos, 1.0);
+  vWorld = w.xyz;
+  vNrm = mat3(uModel) * aNrm;
+  vCol = aCol;
+  gl_Position = uViewProj * w;
+}`;
+
+/* instanced: iPS = xyz + uniform scale, iRT = rotY + tint */
+const INST_VS = VERSION + `
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec3 aCol;
+layout(location=3) in vec4 iPS;
+layout(location=4) in vec4 iRT;
+uniform mat4 uViewProj;
+out vec3 vWorld; out vec3 vNrm; out vec3 vCol;
+void main(){
+  float c = cos(iRT.x), s = sin(iRT.x);
+  vec3 lp = vec3(aPos.x * c + aPos.z * s, aPos.y, -aPos.x * s + aPos.z * c);
+  vec3 ln = vec3(aNrm.x * c + aNrm.z * s, aNrm.y, -aNrm.x * s + aNrm.z * c);
+  vec3 w = lp * vec3(iPS.w, iRT.z, iPS.w) + iPS.xyz;
+  vWorld = w; vNrm = normalize(ln); vCol = aCol * iRT.y;
+  gl_Position = uViewProj * vec4(w, 1.0);
+}`;
+
+/* ---- blob shadow: multiplicative darkening conformed to the ground ---- */
+const SHADOW_VS = VERSION + `
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in float aA;
+uniform mat4 uViewProj;
+out float vA;
+void main(){ vA = aA; gl_Position = uViewProj * vec4(aPos, 1.0); }`;
+const SHADOW_FS = VERSION + `
+precision highp float;
+in float vA;
+out vec4 outColor;
+void main(){ outColor = vec4(mix(vec3(1.0), vec3(0.34, 0.30, 0.31), clamp(vA, 0.0, 1.0)), 1.0); }`;
+
+/* ---- dust points ---- */
+const DUST_VS = VERSION + `
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec2 aData;   // size, alpha
+uniform mat4 uViewProj;
+uniform vec3 uCamPos;
+uniform float uPxScale;
+out float vAlpha; out float vDist;
+void main(){
+  vec4 cp = uViewProj * vec4(aPos, 1.0);
+  float d = length(aPos - uCamPos);
+  vDist = d; vAlpha = aData.y;
+  gl_PointSize = clamp(aData.x * uPxScale / max(d, 1.0), 1.0, 90.0);
+  gl_Position = cp;
+}`;
+const DUST_FS = VERSION + COMMON + `
+in float vAlpha; in float vDist;
+out vec4 outColor;
+void main(){
+  vec2 q = gl_PointCoord - 0.5;
+  float r = dot(q, q);
+  if (r > 0.25) discard;
+  float a = vAlpha * (1.0 - smoothstep(0.04, 0.25, r));
+  vec3 c = vec3(0.82, 0.69, 0.50);
+  float f = 1.0 - exp(-pow(vDist * uFogD, 2.0));
+  c = mix(c, vec3(0.82, 0.72, 0.58), f);
+  outColor = vec4(pow(aces(c * uExposure), vec3(1.0 / 2.2)), a);
+}`;
+
+/* ---- cables ---- */
+const LINE_VS = VERSION + `
+precision highp float;
+layout(location=0) in vec3 aPos;
+uniform mat4 uViewProj;
+uniform vec3 uCamPos;
+out float vDist;
+void main(){ vDist = length(aPos - uCamPos); gl_Position = uViewProj * vec4(aPos, 1.0); }`;
+const LINE_FS = VERSION + COMMON + `
+in float vDist;
+out vec4 outColor;
+void main(){
+  vec3 c = vec3(0.09, 0.08, 0.08);
+  float f = 1.0 - exp(-pow(vDist * uFogD, 2.0));
+  c = mix(c, vec3(0.72, 0.62, 0.50), f);
+  outColor = vec4(pow(aces(c * uExposure), vec3(1.0 / 2.2)), 1.0 - f * 0.55);
+}`;
+
+const P = {
+  sky: program(SKY_VS, SKY_FS, 'sky'),
+  terrain: program(TERRAIN_VS, TERRAIN_FS, 'terrain'),
+  mesh: program(MESH_VS, MESH_FS, 'mesh'),
+  inst: program(INST_VS, MESH_FS, 'inst'),
+  shadow: program(SHADOW_VS, SHADOW_FS, 'shadow'),
+  dust: program(DUST_VS, DUST_FS, 'dust'),
+  line: program(LINE_VS, LINE_FS, 'line')
+};
+
+const FOG_D = 0.00047;
+const EXPOSURE = 1.00;
+function bindCommon(pr, viewProj, camPos) {
+  gl.useProgram(pr.p);
+  if (pr.u.uViewProj) gl.uniformMatrix4fv(pr.u.uViewProj, false, viewProj);
+  if (pr.u.uCamPos) gl.uniform3f(pr.u.uCamPos, camPos.x, camPos.y, camPos.z);
+  if (pr.u.uSunDir) gl.uniform3f(pr.u.uSunDir, SUN.x, SUN.y, SUN.z);
+  if (pr.u.uFogD) gl.uniform1f(pr.u.uFogD, FOG_D);
+  if (pr.u.uExposure) gl.uniform1f(pr.u.uExposure, EXPOSURE);
+  if (pr.u.uWind) gl.uniform2f(pr.u.uWind, WDX, WDZ);
+}
+
+/* --------------------------------------------- 3 chunked quadtree LOD --- */
+const CRES = 24;                 // cells per chunk edge
+const ROOT = 3072;               // root node size (CRES * 128)
+let MIN_LEAF = 48;               // finest node size -> 2 m cells
+let SPLIT = 1.6;                 // split when nearest distance < size * SPLIT
+let FAR_CULL = 2600;
+const SHADOW_MAX_SIZE = 192;     // bake sun shadows on nodes at least this fine
+const Y_MIN = -220, Y_MAX = 240;
+
+/* one shared index buffer — every chunk has identical topology */
+const IBO = (() => {
+  const n = CRES + 1;
+  const idx = new Uint16Array(CRES * CRES * 6 + 4 * CRES * 6);
+  let p = 0;
+  for (let j = 0; j < CRES; j++) {
+    for (let i = 0; i < CRES; i++) {
+      const a = j * n + i, b = a + 1, c = a + n, d = c + 1;
+      idx[p++] = a; idx[p++] = c; idx[p++] = b;
+      idx[p++] = b; idx[p++] = c; idx[p++] = d;
+    }
+  }
+  const skirtBase = n * n;
+  for (let e = 0; e < 4; e++) {
+    for (let k = 0; k < CRES; k++) {
+      let g0, g1;
+      if (e === 0) { g0 = k; g1 = k + 1; }
+      else if (e === 1) { g0 = (n - 1) * n + k; g1 = g0 + 1; }
+      else if (e === 2) { g0 = k * n; g1 = g0 + n; }
+      else { g0 = k * n + (n - 1); g1 = g0 + n; }
+      const s0 = skirtBase + e * n + k, s1 = s0 + 1;
+      idx[p++] = g0; idx[p++] = s0; idx[p++] = g1;
+      idx[p++] = g1; idx[p++] = s0; idx[p++] = s1;
+    }
+  }
+  const b = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  return { buf: b, count: p };
+})();
+
+const VSTRIDE = 8;   // pos3 nrm3 shade road
+function buildChunkVerts(size, ox, oz, withShadow) {
+  const cs = size / CRES, n = CRES + 1, hn = n + 2;
+  const H = new Float32Array(hn * hn);
+  for (let j = 0; j < hn; j++) {
+    const z = oz + (j - 1) * cs;
+    for (let i = 0; i < hn; i++) H[j * hn + i] = heightAt(ox + (i - 1) * cs, z);
+  }
+  const verts = new Float32Array((n * n + 4 * n) * VSTRIDE);
+  let p = 0, minY = 1e9, maxY = -1e9;
+  for (let j = 0; j < n; j++) {
+    const z = oz + j * cs;
+    for (let i = 0; i < n; i++) {
+      const x = ox + i * cs;
+      const h = H[(j + 1) * hn + (i + 1)];
+      const hl = H[(j + 1) * hn + i], hr = H[(j + 1) * hn + i + 2];
+      const hd = H[j * hn + i + 1], hu = H[(j + 2) * hn + i + 1];
+      let nx = hl - hr, ny = 2 * cs, nz = hd - hu;
+      const inv = 1 / (Math.hypot(nx, ny, nz) || 1);
+      verts[p] = i * cs; verts[p + 1] = h; verts[p + 2] = j * cs;
+      verts[p + 3] = nx * inv; verts[p + 4] = ny * inv; verts[p + 5] = nz * inv;
+      verts[p + 6] = withShadow ? sunVis(x, h, z) : 1;
+      verts[p + 7] = roadness(x, z);
+      p += VSTRIDE;
+      if (h < minY) minY = h;
+      if (h > maxY) maxY = h;
+    }
+  }
+  /* skirts hide the cracks between LOD levels */
+  const drop = Math.max(cs * 3.5, 3);
+  for (let e = 0; e < 4; e++) {
+    for (let k = 0; k < n; k++) {
+      let g;
+      if (e === 0) g = k;
+      else if (e === 1) g = (n - 1) * n + k;
+      else if (e === 2) g = k * n;
+      else g = k * n + (n - 1);
+      const s = g * VSTRIDE;
+      for (let c = 0; c < VSTRIDE; c++) verts[p + c] = verts[s + c];
+      verts[p + 1] -= drop;
+      p += VSTRIDE;
+    }
+  }
+  return { verts, minY, maxY };
+}
+
+const chunks = new Map();
+const buildQueue = [];
+const queued = new Set();
+let frameNo = 0;
+const ckey = (s, x, z) => s + ':' + x + ':' + z;
+
+function createChunk(size, ox, oz) {
+  const d = buildChunkVerts(size, ox, oz, size <= SHADOW_MAX_SIZE);
+  const vao = gl.createVertexArray();
+  const vbo = gl.createBuffer();
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, d.verts, gl.STATIC_DRAW);
+  const st = VSTRIDE * 4;
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, st, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, st, 12);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, st, 24);
+  gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, st, 28);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, IBO.buf);
+  gl.bindVertexArray(null);
+  const c = { vao, vbo, size, ox, oz, minY: d.minY, maxY: d.maxY, used: frameNo };
+  chunks.set(ckey(size, ox, oz), c);
+  return c;
+}
+
+const MAX_CHUNKS = 320;
+function evictChunks() {
+  if (chunks.size <= MAX_CHUNKS) return;
+  const all = [...chunks.entries()].sort((a, b) => a[1].used - b[1].used);
+  const kill = chunks.size - MAX_CHUNKS;
+  for (let i = 0; i < kill; i++) {
+    const [k, c] = all[i];
+    if (frameNo - c.used < 3) continue;
+    gl.deleteVertexArray(c.vao);
+    gl.deleteBuffer(c.vbo);
+    chunks.delete(k);
+  }
+}
+
+const nodes = [];
+function nodeDist(px, pz, ox, oz, size) {
+  const dx = Math.max(ox - px, 0, px - (ox + size));
+  const dz = Math.max(oz - pz, 0, pz - (oz + size));
+  return Math.hypot(dx, dz);
+}
+function subdivide(ox, oz, size, px, pz, fr) {
+  const nd = nodeDist(px, pz, ox, oz, size);
+  if (nd > FAR_CULL) return;
+  if (size > MIN_LEAF && nd < size * SPLIT) {
+    const h = size / 2;
+    subdivide(ox, oz, h, px, pz, fr);
+    subdivide(ox + h, oz, h, px, pz, fr);
+    subdivide(ox, oz + h, h, px, pz, fr);
+    subdivide(ox + h, oz + h, h, px, pz, fr);
+    return;
+  }
+  if (!aabbInFrustum(fr, ox, Y_MIN, oz, ox + size, Y_MAX, oz + size)) return;
+  nodes.push(ox, oz, size, nd);
+}
+function collectNodes(px, pz, fr) {
+  nodes.length = 0;
+  const bx = Math.floor(px / ROOT) * ROOT, bz = Math.floor(pz / ROOT) * ROOT;
+  for (let j = -1; j <= 1; j++)
+    for (let i = -1; i <= 1; i++)
+      subdivide(bx + i * ROOT, bz + j * ROOT, ROOT, px, pz, fr);
+}
+
+/* nearest cached ancestor, so a not-yet-built node never leaves a hole */
+function chunkOrAncestor(size, ox, oz) {
+  let s = size, x = ox, z = oz;
+  for (let i = 0; i < 7; i++) {
+    const c = chunks.get(ckey(s, x, z));
+    if (c) return c;
+    s *= 2;
+    x = Math.floor(x / s) * s;
+    z = Math.floor(z / s) * s;
+    if (s > ROOT) break;
+  }
+  return null;
+}
+
+let pendingCount = 0;
+function updateTerrain(px, pz, fr, budgetMs) {
+  collectNodes(px, pz, fr);
+  buildQueue.length = 0;
+  queued.clear();
+  for (let i = 0; i < nodes.length; i += 4) {
+    const ox = nodes[i], oz = nodes[i + 1], size = nodes[i + 2], nd = nodes[i + 3];
+    const k = ckey(size, ox, oz);
+    const c = chunks.get(k);
+    if (c) { c.used = frameNo; continue; }
+    if (!queued.has(k)) { queued.add(k); buildQueue.push({ size, ox, oz, nd }); }
+  }
+  pendingCount = buildQueue.length;
+  if (pendingCount) {
+    buildQueue.sort((a, b) => a.nd - b.nd);
+    const t0 = performance.now();
+    for (let i = 0; i < buildQueue.length; i++) {
+      const b = buildQueue[i];
+      createChunk(b.size, b.ox, b.oz);
+      pendingCount--;
+      if (performance.now() - t0 > budgetMs) break;
+    }
+  }
+  evictChunks();
+}
+
+const drawnKeys = new Set();
+function drawTerrain(viewProj, camPos) {
+  bindCommon(P.terrain, viewProj, camPos);
+  gl.disable(gl.CULL_FACE);
+  drawnKeys.clear();
+  let calls = 0;
+  for (let i = 0; i < nodes.length; i += 4) {
+    const c = chunkOrAncestor(nodes[i + 2], nodes[i], nodes[i + 1]);
+    if (!c) continue;
+    const k = ckey(c.size, c.ox, c.oz);
+    if (drawnKeys.has(k)) continue;
+    drawnKeys.add(k);
+    c.used = frameNo;
+    gl.uniform3f(P.terrain.u.uOrigin, c.ox, 0, c.oz);
+    gl.bindVertexArray(c.vao);
+    gl.drawElements(gl.TRIANGLES, IBO.count, gl.UNSIGNED_SHORT, 0);
+    calls++;
+  }
+  gl.bindVertexArray(null);
+  gl.enable(gl.CULL_FACE);
+  return calls;
+}
+
+/* ------------------------------------------------ 4 meshes + landmarks -- */
+function MB() { this.a = []; }
+MB.prototype.tri = function (p0, p1, p2, col) {
+  const ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2];
+  const vx = p2[0] - p0[0], vy = p2[1] - p0[1], vz = p2[2] - p0[2];
+  let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+  const l = Math.hypot(nx, ny, nz);
+  if (l < 1e-9) return;
+  nx /= l; ny /= l; nz /= l;
+  const a = this.a;
+  const ps = [p0, p1, p2];
+  for (let i = 0; i < 3; i++) a.push(ps[i][0], ps[i][1], ps[i][2], nx, ny, nz, col[0], col[1], col[2]);
+};
+MB.prototype.quad = function (p0, p1, p2, p3, col) { this.tri(p0, p1, p2, col); this.tri(p0, p2, p3, col); };
+MB.prototype.box = function (c, s, rotY, col) {
+  const hx = s[0] / 2, hy = s[1] / 2, hz = s[2] / 2;
+  const cs = Math.cos(rotY), sn = Math.sin(rotY);
+  const P8 = [];
+  for (let i = 0; i < 8; i++) {
+    const x = (i & 1 ? hx : -hx), y = (i & 2 ? hy : -hy), z = (i & 4 ? hz : -hz);
+    P8.push([c[0] + x * cs + z * sn, c[1] + y, c[2] - x * sn + z * cs]);
+  }
+  const b = (i) => P8[i];
+  this.quad(b(4), b(5), b(7), b(6), col);   // +Z
+  this.quad(b(1), b(0), b(2), b(3), col);   // -Z
+  this.quad(b(5), b(1), b(3), b(7), col);   // +X
+  this.quad(b(0), b(4), b(6), b(2), col);   // -X
+  this.quad(b(6), b(7), b(3), b(2), col);   // +Y
+  this.quad(b(0), b(1), b(5), b(4), col);   // -Y
+};
+/* cylinder with its axis along X */
+MB.prototype.cylX = function (c, r, halfW, segs, col, capCol) {
+  const pt = (side, i) => {
+    const t = 2 * Math.PI * (i % segs) / segs;
+    return [c[0] + side * halfW, c[1] + Math.cos(t) * r, c[2] + Math.sin(t) * r];
+  };
+  for (let i = 0; i < segs; i++) {
+    this.quad(pt(1, i), pt(-1, i), pt(-1, i + 1), pt(1, i + 1), col);
+    this.tri([c[0] + halfW, c[1], c[2]], pt(1, i), pt(1, i + 1), capCol || col);
+    this.tri([c[0] - halfW, c[1], c[2]], pt(-1, i + 1), pt(-1, i), capCol || col);
+  }
+};
+MB.prototype.upload = function () {
+  const data = new Float32Array(this.a);
+  const vao = gl.createVertexArray(), vbo = gl.createBuffer();
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 36, 12);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 36, 24);
+  gl.bindVertexArray(null);
+  return { vao, vbo, count: data.length / 9 };
+};
+/* same mesh, plus a per-instance stream at locations 3 and 4 */
+MB.prototype.uploadInstanced = function (maxInst) {
+  const m = this.upload();
+  const ibuf = gl.createBuffer();
+  gl.bindVertexArray(m.vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, ibuf);
+  gl.bufferData(gl.ARRAY_BUFFER, maxInst * 8 * 4, gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 4, gl.FLOAT, false, 32, 0); gl.vertexAttribDivisor(3, 1);
+  gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 32, 16); gl.vertexAttribDivisor(4, 1);
+  gl.bindVertexArray(null);
+  m.ibuf = ibuf;
+  m.data = new Float32Array(maxInst * 8);
+  m.inst = 0;
+  m.max = maxInst;
+  m.flush = function () {
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.ibuf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.data.subarray(0, this.inst * 8));
+  };
+  return m;
+};
+
+/* ---- rock: low-poly displaced sphere, flat shaded ---- */
+function rockMesh(seedOff) {
+  const mb = new MB();
+  const segs = 9, rings = 6;
+  const disp = (r, s) => 0.66 + 0.52 * hash2(r * 71 + seedOff, (s % segs) * 37 + seedOff * 3);
+  const P = [];
+  for (let r = 0; r <= rings; r++) {
+    const phi = Math.PI * r / rings;
+    const row = [];
+    for (let s = 0; s <= segs; s++) {
+      const th = 2 * Math.PI * s / segs;
+      const d = (r === 0 || r === rings) ? disp(r, 0) : disp(r, s);
+      row.push([
+        Math.sin(phi) * Math.cos(th) * d,
+        Math.cos(phi) * d * 0.80,
+        Math.sin(phi) * Math.sin(th) * d
+      ]);
+    }
+    P.push(row);
+  }
+  for (let r = 0; r < rings; r++) {
+    for (let s = 0; s < segs; s++) {
+      const t = 0.30 + 0.16 * hash2(r * 13 + s * 7 + seedOff, s * 29 + seedOff);
+      const col = [t * 1.38, t * 1.10, t * 0.86];
+      mb.quad(P[r][s], P[r + 1][s], P[r + 1][s + 1], P[r][s + 1], col);
+    }
+  }
+  return mb;
+}
+
+/* ---- pylon: leaning pole + crossarm ---- */
+function pylonMesh() {
+  const mb = new MB();
+  const wood = [0.20, 0.16, 0.13], dark = [0.13, 0.11, 0.10];
+  mb.box([0, 4.4, 0], [0.30, 8.8, 0.30], 0, wood);
+  mb.box([0, 8.1, 0], [2.5, 0.20, 0.20], 0, dark);
+  mb.box([0, 7.5, 0], [1.7, 0.16, 0.16], 0, dark);
+  return mb;
+}
+
+/* ---- wreck: half-buried structure ---- */
+function wreckMesh() {
+  const mb = new MB();
+  const steel = [0.15, 0.14, 0.13], rust = [0.26, 0.13, 0.07], dark = [0.10, 0.09, 0.08];
+  for (let i = 0; i < 5; i++) {
+    const z = -8 + i * 4;
+    const lean = (i - 2) * 0.05;
+    mb.box([-4.2, 2.6, z], [0.34, 6.4, 0.34], lean, steel);
+    mb.box([4.2, 2.4, z], [0.34, 6.0, 0.34], -lean, steel);
+    if (i < 3) mb.box([0, 5.4 - i * 0.25, z], [8.8, 0.30, 0.30], 0, rust);
+  }
+  mb.box([-4.6, 2.0, -2], [0.5, 4.5, 15], 0.03, rust);      // fallen wall
+  mb.box([2.6, 0.5, 9.5], [7.0, 1.2, 4.2], 0.4, rust);      // collapsed roof panel
+  mb.box([-7.5, 0.7, 6.0], [1.6, 1.4, 1.6], 0.7, dark);     // crates
+  mb.box([-6.2, 0.6, 8.2], [1.4, 1.2, 1.4], 0.2, dark);
+  mb.box([6.5, 1.6, -6.5], [1.1, 3.2, 1.1], 0.25, steel);   // stub tower
+  return mb;
+}
+
+const MESH = {
+  rockA: null, rockB: null, pylon: null, wreck: null, car: null, wheel: null
+};
+MESH.rockA = rockMesh(3).uploadInstanced(320);
+MESH.rockB = rockMesh(17).uploadInstanced(320);
+MESH.pylon = pylonMesh().uploadInstanced(48);
+MESH.wreck = wreckMesh().uploadInstanced(8);
+
+/* ---- the buggy ---- */
+(function buildCar() {
+  const mb = new MB();
+  const body = [0.60, 0.60, 0.57], cage = [0.10, 0.11, 0.12];
+  const accent = [0.30, 0.52, 0.74], dark = [0.17, 0.17, 0.18];
+  mb.box([0, 0.10, 0.10], [1.62, 0.44, 3.30], 0, body);        // hull
+  mb.box([0, 0.34, 1.42], [1.30, 0.30, 0.70], 0, dark);        // nose
+  mb.box([0, 0.44, -1.30], [1.30, 0.52, 0.90], 0, dark);       // engine bay
+  mb.box([0, 0.60, -1.30], [0.80, 0.14, 0.60], 0, accent);
+  mb.box([-0.86, 0.06, 0.0], [0.10, 0.30, 2.60], 0, cage);     // side rails
+  mb.box([0.86, 0.06, 0.0], [0.10, 0.30, 2.60], 0, cage);
+  for (const sx of [-1, 1]) {
+    mb.box([sx * 0.72, 0.72, 0.55], [0.10, 1.00, 0.10], 0, cage);
+    mb.box([sx * 0.72, 0.70, -0.85], [0.10, 0.96, 0.10], 0, cage);
+    mb.box([sx * 0.72, 1.18, -0.15], [0.10, 0.10, 1.50], 0, cage);
+  }
+  mb.box([0, 1.18, 0.55], [1.54, 0.10, 0.10], 0, cage);
+  mb.box([0, 1.18, -0.85], [1.54, 0.10, 0.10], 0, cage);
+  mb.box([0, 0.52, 0.30], [1.20, 0.06, 0.90], 0, dark);        // seat pan
+  mb.box([-0.32, 0.78, -0.12], [0.46, 0.50, 0.10], 0, dark);   // seat backs
+  mb.box([0.32, 0.78, -0.12], [0.46, 0.50, 0.10], 0, dark);
+  mb.box([0, 1.30, 0.50], [1.10, 0.12, 0.22], 0, [0.55, 0.52, 0.40]); // light bar
+  mb.box([0, 0.42, 1.70], [1.20, 0.10, 0.24], 0, cage);        // bumper
+  MESH.car = mb.upload();
+
+  const wb = new MB();
+  wb.cylX([0, 0, 0], 0.44, 0.17, 12, [0.07, 0.07, 0.08], [0.13, 0.13, 0.14]);
+  wb.cylX([0, 0, 0], 0.22, 0.19, 8, [0.30, 0.32, 0.35], [0.38, 0.42, 0.46]);
+  for (let i = 0; i < 6; i++) {   // tread blocks
+    const t = 2 * Math.PI * i / 6;
+    wb.box([0, Math.cos(t) * 0.44, Math.sin(t) * 0.44], [0.38, 0.10, 0.10], 0, [0.11, 0.11, 0.12]);
+  }
+  MESH.wheel = wb.upload();
+})();
+
+/* ---- seeded scatter of rocks + pebbles around the camera ---- */
+const scatter = { cx: 1e9, cz: 1e9 };
+const _scatN = v3();
+function updateScatter(px, pz) {
+  const CELL = 190;
+  const cx = Math.floor(px / CELL), cz = Math.floor(pz / CELL);
+  if (cx === scatter.cx && cz === scatter.cz) return;
+  scatter.cx = cx; scatter.cz = cz;
+  MESH.rockA.inst = 0; MESH.rockB.inst = 0;
+  const push = (m, x, y, z, s, rot, tint, ys) => {
+    if (m.inst >= m.max) return;
+    const o = m.inst * 8;
+    m.data[o] = x; m.data[o + 1] = y; m.data[o + 2] = z; m.data[o + 3] = s;
+    m.data[o + 4] = rot; m.data[o + 5] = tint; m.data[o + 6] = ys; m.data[o + 7] = 0;
+    m.inst++;
+  };
+  const m0 = h => (h > 0.5 ? MESH.rockA : MESH.rockB);
+  const R = 7;
+  for (let j = -R; j <= R; j++) {
+    for (let i = -R; i <= R; i++) {
+      const gx = cx + i, gz = cz + j;
+      const ox = gx * CELL, oz = gz * CELL;
+      if (Math.hypot(ox + CELL / 2 - px, oz + CELL / 2 - pz) > FAR_CULL) continue;
+      const seed = hash2(gx * 3 + 91, gz * 5 - 13);
+      /* rock formations cluster: 0-4 boulders */
+      const n = seed > 0.72 ? 4 : (seed > 0.48 ? 2 : (seed > 0.34 ? 1 : 0));
+      for (let k = 0; k < n; k++) {
+        const h1 = hash2(gx * 17 + k, gz * 23 + k * 7);
+        const h2 = hash2(gx * 29 - k * 3, gz * 11 + k);
+        const h3 = hash2(gx * 7 + k * 13, gz * 19 - k);
+        const x = ox + h1 * CELL, z = oz + h2 * CELL;
+        if (roadness(x, z) > 0.2) continue;
+        const s = 1.5 + h3 * 4.2;
+        normalAt(_scatN, x, z, Math.max(1.5, s));
+        if (_scatN.y < 0.965) continue;
+        const ys = s * (0.85 + h3 * 0.4);
+        push(m0(h3), x, heightAt(x, z) - ys * 0.30, z, s, h1 * 6.28, 0.95 + h2 * 0.4, ys);
+      }
+      /* pebbles for near-field scale */
+      if (Math.hypot(ox - px, oz - pz) < 420) {
+        for (let k = 0; k < 6; k++) {
+          const h1 = hash2(gx * 53 + k * 31, gz * 61 + k * 3);
+          const h2 = hash2(gx * 43 - k * 7, gz * 71 + k * 19);
+          const x = ox + h1 * CELL, z = oz + h2 * CELL;
+          const s = 0.20 + h1 * 0.55;
+          push(MESH.rockB, x, heightAt(x, z) - s * 0.22, z, s, h2 * 6.28, 1.0 + h1 * 0.3, s * 0.9);
+        }
+      }
+    }
+  }
+  MESH.rockA.flush(); MESH.rockB.flush();
+}
+
+/* ---- pylon line beside the road, with wire ---- */
+const PYLON_SPACING = 96, PYLON_OFF = 33;
+const cableBuf = gl.createBuffer();
+const cableVao = gl.createVertexArray();
+gl.bindVertexArray(cableVao);
+gl.bindBuffer(gl.ARRAY_BUFFER, cableBuf);
+gl.bufferData(gl.ARRAY_BUFFER, 4 * 3 * 4 * 64, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+gl.bindVertexArray(null);
+const cableData = new Float32Array(3 * 4 * 64);
+let cableVerts = 0;
+const pylonState = { k: 1e9 };
+function updatePylons(px, pz) {
+  const k = Math.round(pz / PYLON_SPACING);
+  if (k === pylonState.k) return;
+  pylonState.k = k;
+  MESH.pylon.inst = 0;
+  cableVerts = 0;
+  let prev = null;
+  for (let i = -13; i <= 13; i++) {
+    const idx = k + i;
+    const z = idx * PYLON_SPACING;
+    const x = roadCenterX(z) + PYLON_OFF;
+    const y = heightAt(x, z);
+    const lean = (hash2(idx, 7) - 0.5) * 0.28;
+    if (MESH.pylon.inst < MESH.pylon.max) {
+      const o = MESH.pylon.inst * 8;
+      MESH.pylon.data[o] = x; MESH.pylon.data[o + 1] = y - 0.6; MESH.pylon.data[o + 2] = z;
+      MESH.pylon.data[o + 3] = 1; MESH.pylon.data[o + 4] = lean; MESH.pylon.data[o + 5] = 0.9 + hash2(idx, 3) * 0.3;
+      MESH.pylon.data[o + 6] = 0.85 + hash2(idx, 11) * 0.3; MESH.pylon.data[o + 7] = 0;
+      MESH.pylon.inst++;
+    }
+    const top = { x: x, y: y - 0.6 + 7.6 * (0.85 + hash2(idx, 11) * 0.3), z: z };
+    if (prev && cableVerts + 8 <= 4 * 64) {
+      for (let s = 0; s < 4; s++) {
+        const t0 = s / 4, t1 = (s + 1) / 4;
+        const pt = (t) => {
+          const sag = Math.sin(Math.PI * t) * 2.1;
+          return [prev.x + (top.x - prev.x) * t, prev.y + (top.y - prev.y) * t - sag, prev.z + (top.z - prev.z) * t];
+        };
+        const a = pt(t0), b = pt(t1);
+        cableData[cableVerts * 3] = a[0]; cableData[cableVerts * 3 + 1] = a[1]; cableData[cableVerts * 3 + 2] = a[2];
+        cableVerts++;
+        cableData[cableVerts * 3] = b[0]; cableData[cableVerts * 3 + 1] = b[1]; cableData[cableVerts * 3 + 2] = b[2];
+        cableVerts++;
+      }
+    }
+    prev = top;
+  }
+  MESH.pylon.flush();
+  gl.bindBuffer(gl.ARRAY_BUFFER, cableBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, cableData.subarray(0, cableVerts * 3));
+}
+
+/* ---- fixed wreck sites, sunk into the sand ---- */
+const WRECK_SITES = [
+  { x: 380, z: 900, rot: 0.8 },
+  { x: -1150, z: -420, rot: 2.4 },
+  { x: 240, z: -1850, rot: 5.1 }
+];
+(function placeWrecks() {
+  const m = MESH.wreck;
+  const n = v3();
+  for (let i = 0; i < WRECK_SITES.length; i++) {
+    const s = WRECK_SITES[i];
+    /* nudge onto the flattest ground nearby so it reads as a structure, not debris */
+    let bestFlat = -1, bx = s.x, bz = s.z;
+    for (let j = -3; j <= 3; j++) {
+      for (let k = -3; k <= 3; k++) {
+        const x = s.x + j * 55, z = s.z + k * 55;
+        normalAt(n, x, z, 8);
+        const flat = n.y - Math.hypot(x - s.x, z - s.z) * 0.00012;
+        if (flat > bestFlat) { bestFlat = flat; bx = x; bz = z; }
+      }
+    }
+    s.x = bx; s.z = bz;
+    let minH = 1e9;
+    for (let a = 0; a < 8; a++) {
+      const t = a / 8 * 6.283;
+      minH = Math.min(minH, heightAt(s.x + Math.cos(t) * 19, s.z + Math.sin(t) * 19));
+    }
+    s.y = minH - 2.2;
+    const o = i * 8;
+    m.data[o] = s.x; m.data[o + 1] = s.y; m.data[o + 2] = s.z; m.data[o + 3] = 2.1;
+    m.data[o + 4] = s.rot; m.data[o + 5] = 1; m.data[o + 6] = 2.1; m.data[o + 7] = 0;
+    m.inst++;
+  }
+  m.flush();
+})();
+
+/* ------------------------------------ 5 vehicle: raycast suspension ----- */
+const G = 9.81;
+const CARP = {
+  mass: 950,
+  Ixx: 1350, Iyy: 1500, Izz: 380,
+  wheelR: 0.44, susRest: 0.52, susTravel: 0.36,
+  k: 17500, damp: 1750, antiRoll: 11000,
+  engine: 11500, vMax: 44, brake: 9000,
+  maxSteer: 33 * DEG,
+  mounts: [
+    { x: -0.82, y: 0.30, z: 1.35, steer: 1 },
+    { x: 0.82, y: 0.30, z: 1.35, steer: 1 },
+    { x: -0.86, y: 0.30, z: -1.32, steer: 0 },
+    { x: 0.86, y: 0.30, z: -1.32, steer: 0 }
+  ]
+};
+const UP = v3(0, 1, 0), FWD = v3(0, 0, 1), RIGHT = v3(1, 0, 0);
+
+const car = {
+  p: v3(0, 0, 0), v: v3(0, 0, 0), w: v3(0, 0, 0), q: qid(),
+  steer: 0, throttle: 0, brake: 0, hand: 0,
+  up: v3(0, 1, 0), fwd: v3(0, 0, 1), right: v3(1, 0, 0),
+  wheels: CARP.mounts.map(() => ({ comp: 0, prevComp: 0, contact: 0, spin: 0, slip: 0, load: 0, cx: 0, cy: 0, cz: 0 })),
+  contacts: 0, flipTimer: 0, surface: 0, grade: 0, slipAvg: 0, airborne: 0
+};
+
+const SPAWN_Z = 950;
+function resetCar(toRoad) {
+  const z = toRoad ? SPAWN_Z : car.p.z;
+  const x = toRoad ? roadCenterX(z) : car.p.x;
+  car.p.x = x; car.p.z = z;
+  car.p.y = heightAt(x, z) + 1.4;
+  vset(car.v, 0, 0, 0); vset(car.w, 0, 0, 0);
+  car.q = qid();
+  if (!toRoad) {
+    /* keep heading, drop the roll */
+    const yaw = Math.atan2(car.fwd.x, car.fwd.z);
+    qAxisAngle(car.q, 0, 1, 0, yaw);
+  }
+  car.flipTimer = 0;
+  for (const wl of car.wheels) { wl.comp = 0; wl.prevComp = 0; wl.spin = 0; }
+}
+
+const _mount = v3(), _r = v3(), _rc = v3(), _down = v3(), _pv = v3(), _tmp = v3(), _tmp2 = v3();
+const _fw = v3(), _side = v3(), _ng = v3(), _F = v3(), _T = v3(), _acc = v3(), _rr = v3();
+const ROLL_CENTRE = -0.16;
+
+function carStep(dt) {
+  qrot(car.up, car.q, UP);
+  qrot(car.fwd, car.q, FWD);
+  qrot(car.right, car.q, RIGHT);
+
+  /* steering: speed sensitive, smoothed */
+  const speed = vlen(car.v);
+  const target = car.steerInput * CARP.maxSteer / (1 + speed * 0.038);
+  car.steer += (target - car.steer) * Math.min(1, dt * 9);
+
+  vset(_F, 0, -CARP.mass * G, 0);
+  vset(_T, 0, 0, 0);
+
+  const fwdSpeed = vdot(car.v, car.fwd);
+  let drive = 0, brakeF = 0;
+  if (car.throttle > 0.01) {
+    const fade = 1 - Math.pow(clamp(Math.max(fwdSpeed, 0) / CARP.vMax, 0, 1), 1.5);
+    drive = car.throttle * CARP.engine * fade;
+  }
+  if (car.brake > 0.01) {
+    if (fwdSpeed > 0.8) brakeF = car.brake * CARP.brake;
+    else drive = -car.brake * CARP.engine * 0.42 * (1 - clamp(-fwdSpeed / 14, 0, 1));
+  }
+
+  let contacts = 0, slipSum = 0, surf = 0;
+  for (let i = 0; i < 4; i++) {
+    const m = CARP.mounts[i], wl = car.wheels[i];
+    qrot(_r, car.q, vset(_tmp, m.x, m.y, m.z));
+    vadd(_mount, car.p, _r);
+    vscale(_down, car.up, -1);
+
+    /* near-vertical ray against the analytic field — never touches the mesh */
+    let t = Math.max(0, _mount.y - heightAt(_mount.x, _mount.z)) / Math.max(0.25, -_down.y);
+    for (let it = 0; it < 3; it++) {
+      const hx = _mount.x + _down.x * t, hy = _mount.y + _down.y * t, hz = _mount.z + _down.z * t;
+      const g = hy - heightAt(hx, hz);
+      t += g / Math.max(0.25, -_down.y);
+      if (Math.abs(g) < 0.01) break;
+    }
+    const maxD = CARP.susRest + CARP.wheelR;
+    let comp = maxD - t;
+    wl.prevComp = wl.comp;
+
+    if (comp <= 0) {
+      wl.comp = 0; wl.contact = 0; wl.load = 0;
+      wl.spin *= Math.exp(-0.6 * dt);
+      wl.cx = _mount.x + _down.x * CARP.susRest;
+      wl.cy = _mount.y + _down.y * CARP.susRest;
+      wl.cz = _mount.z + _down.z * CARP.susRest;
+      continue;
+    }
+    contacts++;
+    const bottomed = comp > CARP.susTravel;
+    comp = Math.min(comp, CARP.susTravel);
+    wl.comp = comp;
+    wl.contact = 1;
+
+    vaddScaled(_rc, _r, _down, maxD - comp);           // mount->contact, body relative
+    vcross(_pv, car.w, _rc);
+    vadd(_pv, car.v, _pv);                              // velocity of the contact point
+
+    const vUp = vdot(_pv, car.up);
+    let load = CARP.k * comp - CARP.damp * vUp;
+    /* anti-roll bar */
+    const other = car.wheels[i ^ 1];
+    load += CARP.antiRoll * (comp - other.comp);
+    if (bottomed) load += 42000 * (maxD - t - CARP.susTravel);
+    load = clamp(load, 0, 32000);
+    wl.load = load;
+
+    vaddScaled(_F, _F, car.up, load);
+    vcross(_tmp2, _rc, vscale(_tmp, car.up, load));
+    vadd(_T, _T, _tmp2);
+
+    /* tyre frame on the ground plane */
+    const cxw = _mount.x + _down.x * t, czw = _mount.z + _down.z * t;
+    normalAt(_ng, cxw, czw, 0.5);
+    const st = m.steer ? car.steer : 0;
+    _tmp.x = car.fwd.x * Math.cos(st) + car.right.x * Math.sin(st);
+    _tmp.y = car.fwd.y * Math.cos(st) + car.right.y * Math.sin(st);
+    _tmp.z = car.fwd.z * Math.cos(st) + car.right.z * Math.sin(st);
+    vaddScaled(_fw, _tmp, _ng, -vdot(_tmp, _ng));
+    vnorm(_fw, _fw);
+    vnorm(_side, vcross(_side, _ng, _fw));
+
+    const vf = vdot(_pv, _fw), vs = vdot(_pv, _side);
+    const road = roadness(cxw, czw);
+    surf += road;
+    const muLong = mix(1.30, 1.75, road);
+    let muLat = mix(0.98, 1.60, road);
+    const roll = mix(52, 12, road);
+
+    const rear = i >= 2;
+    if (car.hand > 0.5 && rear) muLat *= 0.32;
+
+    let Ff = (rear && car.hand > 0.5 ? 0 : drive * 0.25) - vf * roll - Math.sign(vf) * brakeF * 0.25;
+    if (car.hand > 0.5 && rear) Ff -= Math.sign(vf) * 2600;
+    if (car.throttle < 0.05 && car.brake < 0.05) Ff -= Math.sign(vf) * Math.min(Math.abs(vf) * 900, 260);
+    let Fs = -load * clamp(vs * 0.70, -muLat, muLat);
+
+    const lim = load * muLong;
+    const mag = Math.hypot(Ff, Fs);
+    if (mag > lim && mag > 1e-4) { const s = lim / mag; Ff *= s; Fs *= s; }
+
+    wl.slip = Math.min(1, (Math.abs(vs) * 0.13 + Math.max(0, Math.abs(drive * 0.25) - lim) * 0.0006));
+    slipSum += wl.slip;
+
+    _tmp.x = _fw.x * Ff + _side.x * Fs;
+    _tmp.y = _fw.y * Ff + _side.y * Fs;
+    _tmp.z = _fw.z * Ff + _side.z * Fs;
+    vadd(_F, _F, _tmp);
+    /* tyre forces act about a roll centre near the hull, not down at the contact
+       patch — the arcade fix that keeps hard corners from tipping the buggy */
+    vaddScaled(_rr, _rc, car.up, ROLL_CENTRE - vdot(_rc, car.up));
+    vcross(_tmp2, _rr, _tmp);
+    vadd(_T, _T, _tmp2);
+
+    wl.spin += (vf / CARP.wheelR) * dt;
+    wl.cx = _mount.x + _down.x * (CARP.susRest - comp);
+    wl.cy = _mount.y + _down.y * (CARP.susRest - comp);
+    wl.cz = _mount.z + _down.z * (CARP.susRest - comp);
+  }
+  car.contacts = contacts;
+  car.slipAvg = contacts ? slipSum / contacts : 0;
+  car.surface = contacts ? surf / contacts : 0;
+
+  /* aero + airborne self-righting assist */
+  const sp = vlen(car.v);
+  vaddScaled(_F, _F, car.v, -0.55 * sp);
+  if (contacts === 0) {
+    vcross(_tmp, car.up, UP);
+    vaddScaled(_T, _T, _tmp, 3200);
+    vaddScaled(_T, _T, car.w, -1800);
+    car.airborne = Math.min(1, car.airborne + dt * 3);
+  } else {
+    car.airborne = Math.max(0, car.airborne - dt * 6);
+  }
+
+  /* integrate */
+  vaddScaled(car.v, car.v, _F, dt / CARP.mass);
+  vaddScaled(car.p, car.p, car.v, dt);
+
+  qrotInv(_tmp, car.q, _T);
+  vset(_acc, _tmp.x / CARP.Ixx, _tmp.y / CARP.Iyy, _tmp.z / CARP.Izz);
+  qrot(_tmp, car.q, _acc);
+  vaddScaled(car.w, car.w, _tmp, dt);
+  const angDamp = Math.exp(-(contacts ? 1.6 : 0.5) * dt);
+  vscale(car.w, car.w, angDamp);
+  const wl2 = vlen(car.w);
+  if (wl2 > 14) vscale(car.w, car.w, 14 / wl2);
+  qIntegrate(car.q, car.w, dt);
+
+  /* hard floor guard */
+  const gh = heightAt(car.p.x, car.p.z);
+  if (car.p.y < gh + 0.12) { car.p.y = gh + 0.12; if (car.v.y < 0) car.v.y *= -0.15; }
+
+  car.grade = 0;
+  normalAt(_ng, car.p.x, car.p.z, 1.0);
+  car.grade = -vdot(_ng, car.fwd) / Math.max(0.05, _ng.y) * 100;
+
+  if (car.up.y < 0.15 && contacts > 0) {
+    car.flipTimer += dt;
+    if (car.flipTimer > 2.6) resetCar(false);
+  } else car.flipTimer = 0;
+}
+
+/* ------------------------------------------------ dust ----------------- */
+const DUST_MAX = 260;
+const dust = {
+  px: new Float32Array(DUST_MAX), py: new Float32Array(DUST_MAX), pz: new Float32Array(DUST_MAX),
+  vx: new Float32Array(DUST_MAX), vy: new Float32Array(DUST_MAX), vz: new Float32Array(DUST_MAX),
+  life: new Float32Array(DUST_MAX), max: new Float32Array(DUST_MAX), sz: new Float32Array(DUST_MAX),
+  head: 0, gpu: new Float32Array(DUST_MAX * 5), live: 0
+};
+const dustVao = gl.createVertexArray(), dustVbo = gl.createBuffer();
+gl.bindVertexArray(dustVao);
+gl.bindBuffer(gl.ARRAY_BUFFER, dustVbo);
+gl.bufferData(gl.ARRAY_BUFFER, DUST_MAX * 5 * 4, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0);
+gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
+gl.bindVertexArray(null);
+
+function spawnDust(x, y, z, vx, vy, vz, life, size) {
+  const i = dust.head++ % DUST_MAX;
+  dust.px[i] = x; dust.py[i] = y; dust.pz[i] = z;
+  dust.vx[i] = vx; dust.vy[i] = vy; dust.vz[i] = vz;
+  dust.life[i] = life; dust.max[i] = life; dust.sz[i] = size;
+}
+function updateDust(dt) {
+  let n = 0;
+  for (let i = 0; i < DUST_MAX; i++) {
+    if (dust.life[i] <= 0) continue;
+    dust.life[i] -= dt;
+    if (dust.life[i] <= 0) continue;
+    const d = Math.exp(-1.4 * dt);
+    dust.vx[i] *= d; dust.vz[i] *= d;
+    dust.vy[i] = dust.vy[i] * d + 0.55 * dt;
+    dust.px[i] += dust.vx[i] * dt;
+    dust.py[i] += dust.vy[i] * dt;
+    dust.pz[i] += dust.vz[i] * dt;
+    const age = 1 - dust.life[i] / dust.max[i];
+    const o = n * 5;
+    dust.gpu[o] = dust.px[i]; dust.gpu[o + 1] = dust.py[i]; dust.gpu[o + 2] = dust.pz[i];
+    dust.gpu[o + 3] = dust.sz[i] * (0.5 + age * 2.6);
+    dust.gpu[o + 4] = Math.min(1, (1 - age) * 1.6) * 0.30 * Math.min(1, age * 5);
+    n++;
+  }
+  dust.live = n;
+  if (n) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, dustVbo);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, dust.gpu.subarray(0, n * 5));
+  }
+}
+let dustAccum = 0;
+function emitWheelDust(dt) {
+  const sp = vlen(car.v);
+  dustAccum += dt * (car.slipAvg * 46 + Math.min(sp, 30) * 0.7 * (1 - car.surface * 0.8));
+  while (dustAccum > 1) {
+    dustAccum -= 1;
+    let best = -1, bs = 0.15;
+    for (let i = 0; i < 4; i++) {
+      const s = car.wheels[i].contact * (car.wheels[i].slip + 0.25);
+      if (s > bs) { bs = s; best = i; }
+    }
+    if (best < 0) { dustAccum = 0; break; }
+    const wl = car.wheels[best];
+    const j = () => (Math.random() - 0.5);
+    spawnDust(
+      wl.cx + j() * 0.5, wl.cy - 0.25 + j() * 0.2, wl.cz + j() * 0.5,
+      -car.v.x * 0.16 + j() * 2.2, 0.5 + Math.random() * 1.4, -car.v.z * 0.16 + j() * 2.2,
+      0.8 + Math.random() * 1.1, 26 + Math.random() * 42
+    );
+  }
+}
+
+/* --------------------------------------- ground-conformed blob shadow --- */
+const SH_NX = 15, SH_NZ = 9;
+const shadowVerts = new Float32Array(SH_NX * SH_NZ * 4);
+const shadowVao = gl.createVertexArray(), shadowVbo = gl.createBuffer();
+gl.bindVertexArray(shadowVao);
+gl.bindBuffer(gl.ARRAY_BUFFER, shadowVbo);
+gl.bufferData(gl.ARRAY_BUFFER, shadowVerts.byteLength, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 16, 0);
+gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 16, 12);
+(function () {
+  const idx = new Uint16Array((SH_NX - 1) * (SH_NZ - 1) * 6);
+  let p = 0;
+  for (let j = 0; j < SH_NZ - 1; j++)
+    for (let i = 0; i < SH_NX - 1; i++) {
+      const a = j * SH_NX + i, b = a + 1, c = a + SH_NX, d = c + 1;
+      idx[p++] = a; idx[p++] = c; idx[p++] = b; idx[p++] = b; idx[p++] = c; idx[p++] = d;
+    }
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+})();
+const SH_COUNT = (SH_NX - 1) * (SH_NZ - 1) * 6;
+
+function updateShadow() {
+  const h = Math.max(0.4, car.p.y - heightAt(car.p.x, car.p.z));
+  const off = clamp(h / SUN_TAN, 0, 26) * 0.38;
+  const cx = car.p.x - SUN_HX * off, cz = car.p.z - SUN_HZ * off;
+  const a = 3.1 + off * 0.5, b = 1.75;
+  const strength = clamp(1 - car.airborne * 0.55, 0.25, 1) * clamp(1 - (h - 0.6) * 0.25, 0.2, 1);
+  let p = 0;
+  for (let j = 0; j < SH_NZ; j++) {
+    const v = (j / (SH_NZ - 1) - 0.5) * 2;
+    for (let i = 0; i < SH_NX; i++) {
+      const u = (i / (SH_NX - 1) - 0.5) * 2;
+      const x = cx + SUN_HX * u * a - SUN_HZ * v * b;
+      const z = cz + SUN_HZ * u * a + SUN_HX * v * b;
+      const r = Math.hypot(u, v);
+      shadowVerts[p] = x;
+      shadowVerts[p + 1] = heightAt(x, z) + 0.05;
+      shadowVerts[p + 2] = z;
+      shadowVerts[p + 3] = (1 - smoothstep(0.12, 1.0, r)) * 0.72 * strength;
+      p += 4;
+    }
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, shadowVbo);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, shadowVerts);
+}
+
+/* ------------------------------------ 6 camera / input / hud / audio ---- */
+const cam = { p: v3(0, 0, -10), look: v3(), fov: 63 * DEG, mode: 0, init: false };
+const _flat = v3(0, 0, 1), _des = v3(), _lk = v3();
+
+function updateCamera(dt) {
+  vset(_flat, car.fwd.x, 0, car.fwd.z);
+  if (Math.hypot(_flat.x, _flat.z) < 0.05) vset(_flat, 0, 0, 1);
+  vnorm(_flat, _flat);
+  const sp = vlen(car.v);
+
+  if (cam.mode === 1) {                       // cockpit
+    qrot(_des, car.q, vset(_tmp, -0.30, 1.00, 0.18));
+    vadd(_des, car.p, _des);
+    vcopy(cam.p, _des);
+    vaddScaled(_lk, cam.p, car.fwd, 12);
+    vaddScaled(_lk, _lk, car.up, 0.9);
+    vcopy(cam.look, _lk);
+    cam.fov = (66 + Math.min(sp, 42) * 0.18) * DEG;
+    return;
+  }
+
+  const aspect = canvas.width / Math.max(1, canvas.height);
+  const k = clamp(1 / (0.55 + 0.45 * Math.min(aspect, 1.4)), 1, 1.45);   // pull back when upright
+  const back = (cam.mode === 2 ? 15.5 : 7.9) * k;
+  const high = (cam.mode === 2 ? 6.4 : 3.05) * (0.6 + 0.4 * k);
+  _des.x = car.p.x - _flat.x * back + car.v.x * 0.10;
+  _des.y = car.p.y + high;
+  _des.z = car.p.z - _flat.z * back + car.v.z * 0.10;
+
+  if (!cam.init) { vcopy(cam.p, _des); cam.init = true; }
+  const lag = 1 - Math.exp(-dt * (4.2 + sp * 0.10));
+  cam.p.x += (_des.x - cam.p.x) * lag;
+  cam.p.y += (_des.y - cam.p.y) * lag * 1.25;
+  cam.p.z += (_des.z - cam.p.z) * lag;
+
+  const gh = heightAt(cam.p.x, cam.p.z) + 1.7;
+  if (cam.p.y < gh) cam.p.y = gh;
+
+  _lk.x = car.p.x + _flat.x * 5.5 + car.v.x * 0.16;
+  _lk.y = car.p.y + 1.15;
+  _lk.z = car.p.z + _flat.z * 5.5 + car.v.z * 0.16;
+  const llag = 1 - Math.exp(-dt * 9);
+  cam.look.x += (_lk.x - cam.look.x) * llag;
+  cam.look.y += (_lk.y - cam.look.y) * llag;
+  cam.look.z += (_lk.z - cam.look.z) * llag;
+  cam.fov = (61 + Math.min(sp, 44) * 0.30) * DEG;
+}
+
+/* ---------------- input ---------------- */
+car.steerInput = 0;
+const keys = Object.create(null);
+const input = { steer: 0, gas: 0, brake: 0, hand: 0, tilt: false, tiltVal: 0, tiltZero: null };
+const elStick = document.getElementById('stick');
+const elGas = document.getElementById('gas');
+const elBrk = document.getElementById('brk');
+const elHbk = document.getElementById('hbk');
+
+addEventListener('keydown', e => {
+  keys[e.code] = 1;
+  if (e.code === 'KeyR') resetCar(false);
+  if (e.code === 'KeyC') cam.mode = (cam.mode + 1) % 3;
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+}, { passive: false });
+addEventListener('keyup', e => { keys[e.code] = 0; });
+
+function holdBtn(el, set) {
+  const on = e => { e.preventDefault(); el.classList.add('hit'); set(1); el.setPointerCapture && el.setPointerCapture(e.pointerId); };
+  const off = e => { el.classList.remove('hit'); set(0); };
+  el.addEventListener('pointerdown', on, { passive: false });
+  el.addEventListener('pointerup', off);
+  el.addEventListener('pointercancel', off);
+  el.addEventListener('lostpointercapture', off);
+}
+holdBtn(elGas, v => input.gas = v);
+holdBtn(elBrk, v => input.brake = v);
+holdBtn(elHbk, v => input.hand = v);
+
+let steerPointer = null, steerX0 = 0;
+addEventListener('pointerdown', e => {
+  if (e.target.closest && e.target.closest('#gas,#brk,#hbk,.tool,#boot')) return;
+  if (steerPointer !== null) return;
+  if (e.clientX > innerWidth * 0.52 && innerWidth < 900) return;
+  steerPointer = e.pointerId;
+  steerX0 = e.clientX;
+  elStick.style.left = e.clientX + 'px';
+  elStick.style.top = e.clientY + 'px';
+  elStick.classList.add('on');
+  elStick.firstElementChild.style.transform = 'translateX(0px)';
+}, { passive: false });
+addEventListener('pointermove', e => {
+  if (e.pointerId !== steerPointer) return;
+  const range = Math.min(innerWidth * 0.20, 150);
+  input.steer = clamp((e.clientX - steerX0) / range, -1, 1);
+  elStick.firstElementChild.style.transform = 'translateX(' + (input.steer * 48) + 'px)';
+}, { passive: false });
+function endSteer(e) {
+  if (e.pointerId !== steerPointer) return;
+  steerPointer = null; input.steer = 0;
+  elStick.classList.remove('on');
+}
+addEventListener('pointerup', endSteer);
+addEventListener('pointercancel', endSteer);
+addEventListener('touchmove', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('gesturestart', e => e.preventDefault());
+
+/* tilt steering */
+function onTilt(e) {
+  const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+  let raw;
+  if (ang === 90) raw = -(e.beta || 0);
+  else if (ang === 270 || ang === -90) raw = (e.beta || 0);
+  else raw = (e.gamma || 0);
+  if (input.tiltZero === null) input.tiltZero = raw;
+  input.tiltVal = clamp((raw - input.tiltZero) / 20, -1, 1);
+}
+function enableTilt() {
+  const start = () => { input.tilt = true; input.tiltZero = null; addEventListener('deviceorientation', onTilt); };
+  const DOE = window.DeviceOrientationEvent;
+  if (DOE && typeof DOE.requestPermission === 'function') {
+    DOE.requestPermission().then(r => { if (r === 'granted') start(); }).catch(() => {});
+  } else if (DOE) start();
+}
+function disableTilt() { input.tilt = false; removeEventListener('deviceorientation', onTilt); }
+
+function readInput(dt) {
+  const kL = (keys['ArrowLeft'] || keys['KeyA']) ? 1 : 0;
+  const kR = (keys['ArrowRight'] || keys['KeyD']) ? 1 : 0;
+  let s = input.steer;
+  if (kL || kR) s = kR - kL;
+  else if (input.tilt) s = input.tiltVal;
+  car.steerInput += (s - car.steerInput) * Math.min(1, dt * 12);
+  car.throttle = Math.max(input.gas, (keys['ArrowUp'] || keys['KeyW']) ? 1 : 0);
+  car.brake = Math.max(input.brake, (keys['ArrowDown'] || keys['KeyS']) ? 1 : 0);
+  car.hand = Math.max(input.hand, keys['Space'] ? 1 : 0);
+}
+
+/* ---------------- audio ---------------- */
+const audio = { ctx: null, on: true, nodes: null };
+function initAudio() {
+  if (audio.ctx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  const ctx = new AC();
+  const master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+  const o1 = ctx.createOscillator(); o1.type = 'sawtooth';
+  const o2 = ctx.createOscillator(); o2.type = 'square'; o2.detune.value = -8;
+  const eg = ctx.createGain(); eg.gain.value = 0.16;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 620; lp.Q.value = 4;
+  o1.connect(eg); o2.connect(eg); eg.connect(lp); lp.connect(master);
+  const len = Math.floor(ctx.sampleRate * 2);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) ch[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 780; bp.Q.value = 0.5;
+  const ng = ctx.createGain(); ng.gain.value = 0;
+  src.connect(bp); bp.connect(ng); ng.connect(master);
+  o1.start(); o2.start(); src.start();
+  audio.ctx = ctx;
+  audio.nodes = { master, o1, o2, lp, ng, bp };
+}
+function updateAudio() {
+  if (!audio.ctx || !audio.nodes) return;
+  const n = audio.nodes, t = audio.ctx.currentTime;
+  const sp = Math.abs(vdot(car.v, car.fwd));
+  const rpm = 0.10 + Math.min(sp, CARP.vMax) / CARP.vMax * 0.9;
+  const f = 34 + rpm * 128 + car.throttle * 22;
+  n.o1.frequency.setTargetAtTime(f, t, 0.06);
+  n.o2.frequency.setTargetAtTime(f * 0.5, t, 0.06);
+  n.lp.frequency.setTargetAtTime(420 + car.throttle * 1500 + rpm * 900, t, 0.08);
+  const wind = Math.min(1, vlen(car.v) / 34) * 0.5 + car.slipAvg * 0.5;
+  n.ng.gain.setTargetAtTime(wind * 0.10, t, 0.12);
+  n.bp.frequency.setTargetAtTime(600 + wind * 1400, t, 0.12);
+  n.master.gain.setTargetAtTime(audio.on ? 0.55 : 0, t, 0.15);
+}
+
+/* ---------------- hud ---------------- */
+const el = id => document.getElementById(id);
+const hudSpeed = el('speed'), hudAlt = el('t-alt'), hudGrade = el('t-grade'),
+      hudSurf = el('t-surf'), hudDist = el('t-dist'), hudFill = el('g-fill'),
+      hudTape = el('tape'), hudBearing = el('bearing'), hudSteer = el('steerbar').querySelector('i'),
+      hudFps = el('fps'), compassEl = el('compass');
+const PPD = 2.5;
+(function buildTape() {
+  let html = '';
+  for (let d = -190; d <= 550; d += 5) {
+    const dd = ((d % 360) + 360) % 360;
+    const major = dd % 30 === 0;
+    html += '<i class="' + (major ? 'major' : '') + '" style="left:' + (d * PPD) + 'px"></i>';
+    if (major) {
+      const card = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' }[dd];
+      html += '<b class="' + (card ? 'card' : '') + '" style="left:' + (d * PPD) + 'px">' +
+        (card || (dd < 100 ? '0' + dd : dd)) + '</b>';
+    }
+  }
+  hudTape.innerHTML = html;
+})();
+
+let hudT = 0;
+function updateHud(dt) {
+  const heading = ((Math.atan2(car.fwd.x, car.fwd.z) / DEG) + 360) % 360;
+  hudTape.style.transform = 'translateX(' + (compassEl.clientWidth / 2 - heading * PPD) + 'px)';
+  hudSteer.style.transform = 'translateX(' + (car.steerInput * 48 - 1) + 'px)';
+  hudFill.style.width = (car.throttle * 100) + '%';
+  hudT += dt;
+  if (hudT < 0.09) return;
+  hudT = 0;
+  hudSpeed.textContent = Math.round(vlen(car.v) * 2.23694);
+  hudAlt.textContent = Math.round(car.p.y);
+  hudGrade.textContent = clamp(Math.round(car.grade), -99, 99);
+  hudSurf.textContent = car.surface > 0.35 ? 'TRACK' : 'SAND';
+  hudDist.textContent = (Math.hypot(car.p.x, car.p.z) / 1000).toFixed(1);
+  let best = null, bd = 1e9;
+  for (const s of WRECK_SITES) {
+    const d = Math.hypot(s.x - car.p.x, s.z - car.p.z);
+    if (d < bd) { bd = d; best = s; }
+  }
+  if (best) {
+    const b = ((Math.atan2(best.x - car.p.x, best.z - car.p.z) / DEG) + 360) % 360;
+    hudBearing.textContent = 'WRECK ' + (bd / 1000).toFixed(1) + 'KM · ' +
+      String(Math.round(b)).padStart(3, '0') + '°';
+  }
+}
+
+/* ------------------------------------------------ 7 render + main loop -- */
+const projM = m4(), viewM = m4(), vpM = m4(), invVP = m4(), modelM = m4();
+const frustum = new Float32Array(24);
+const _wq = qid(), _wq2 = qid(), _wq3 = qid(), _wp = v3();
+
+function drawInstanced(m) {
+  if (!m.inst) return;
+  gl.bindVertexArray(m.vao);
+  gl.drawArraysInstanced(gl.TRIANGLES, 0, m.count, m.inst);
+}
+
+function render() {
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  /* sky */
+  gl.disable(gl.DEPTH_TEST);
+  gl.depthMask(false);
+  bindCommon(P.sky, vpM, cam.p);
+  gl.uniformMatrix4fv(P.sky.u.uInvVP, false, invVP);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
+  gl.depthMask(true);
+  gl.enable(gl.CULL_FACE);
+
+  const calls = drawTerrain(vpM, cam.p);
+
+  /* props */
+  bindCommon(P.inst, vpM, cam.p);
+  drawInstanced(MESH.rockA);
+  drawInstanced(MESH.rockB);
+  drawInstanced(MESH.pylon);
+  drawInstanced(MESH.wreck);
+
+  /* car */
+  bindCommon(P.mesh, vpM, cam.p);
+  m4FromQuatPos(modelM, car.q, car.p);
+  gl.uniformMatrix4fv(P.mesh.u.uModel, false, modelM);
+  gl.bindVertexArray(MESH.car.vao);
+  gl.drawArrays(gl.TRIANGLES, 0, MESH.car.count);
+  for (let i = 0; i < 4; i++) {
+    const wl = car.wheels[i];
+    qAxisAngle(_wq2, 0, 1, 0, CARP.mounts[i].steer ? car.steer : 0);
+    qAxisAngle(_wq3, 1, 0, 0, wl.spin);
+    qmul(_wq, car.q, _wq2);
+    qmul(_wq, _wq, _wq3);
+    vset(_wp, wl.cx, wl.cy, wl.cz);
+    m4FromQuatPos(modelM, _wq, _wp);
+    gl.uniformMatrix4fv(P.mesh.u.uModel, false, modelM);
+    gl.bindVertexArray(MESH.wheel.vao);
+    gl.drawArrays(gl.TRIANGLES, 0, MESH.wheel.count);
+  }
+
+  /* cables */
+  if (cableVerts > 1) {
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    bindCommon(P.line, vpM, cam.p);
+    gl.bindVertexArray(cableVao);
+    gl.drawArrays(gl.LINES, 0, cableVerts);
+    gl.disable(gl.BLEND);
+  }
+
+  /* ground shadow — multiplies the terrain underneath */
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ZERO, gl.SRC_COLOR);
+  gl.depthMask(false);
+  gl.disable(gl.CULL_FACE);
+  bindCommon(P.shadow, vpM, cam.p);
+  gl.bindVertexArray(shadowVao);
+  gl.drawElements(gl.TRIANGLES, SH_COUNT, gl.UNSIGNED_SHORT, 0);
+  gl.enable(gl.CULL_FACE);
+
+  /* dust */
+  if (dust.live) {
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    bindCommon(P.dust, vpM, cam.p);
+    gl.uniform1f(P.dust.u.uPxScale, canvas.height / 900);
+    gl.bindVertexArray(dustVao);
+    gl.drawArrays(gl.POINTS, 0, dust.live);
+  }
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+  gl.bindVertexArray(null);
+  return calls;
+}
+
+/* ---------------- viewport ---------------- */
+let quality = 1.0;
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const vw = (window.visualViewport && window.visualViewport.width) || innerWidth;
+  const vh = (window.visualViewport && window.visualViewport.height) || innerHeight;
+  const w = Math.max(2, Math.round(vw * dpr * quality));
+  const h = Math.max(2, Math.round(vh * dpr * quality));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  canvas.style.width = vw + 'px';
+  canvas.style.height = vh + 'px';
+}
+addEventListener('resize', resize);
+addEventListener('orientationchange', () => setTimeout(resize, 220));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+
+/* ---------------- adaptive quality ---------------- */
+let ftAvg = 16, qTimer = 0, qLocked = 0;
+function adapt(dt) {
+  ftAvg = ftAvg * 0.93 + dt * 1000 * 0.07;
+  qTimer += dt;
+  if (qTimer < 1.6) return;
+  qTimer = 0;
+  if (ftAvg > 23 && quality > 0.62) { quality = Math.max(0.62, quality - 0.11); resize(); }
+  else if (ftAvg > 23 && !qLocked) {
+    qLocked = 1; MIN_LEAF = 96; SPLIT = 1.35; FAR_CULL = 1900;
+  } else if (ftAvg < 13.5 && quality < 1.0) { quality = Math.min(1, quality + 0.06); resize(); }
+}
+
+/* ---------------- boot + loop ---------------- */
+const PH = 1 / 120;
+let last = performance.now(), acc = 0, booting = true, maxPending = 1, showFps = false;
+const bootStart = performance.now();
+resize();
+resetCar(true);
+vset(cam.look, car.p.x, car.p.y + 1, car.p.z + 5);
+
+const bootEl = el('boot'), barFill = el('bar-fill'), statusEl = el('status'), goBtn = el('go');
+let ready = false;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.25) dt = 0.25;
+  if (dt <= 0) dt = 1 / 60;
+  frameNo++;
+
+  if (!booting) {
+    readInput(dt);
+    acc += dt;
+    let steps = 0;
+    while (acc >= PH && steps < 8) { carStep(PH); acc -= PH; steps++; }
+    if (acc > PH * 4) acc = 0;
+    emitWheelDust(dt);
+    adapt(dt);
+  }
+  updateDust(dt);
+  updateCamera(dt);
+
+  const aspect = canvas.width / Math.max(1, canvas.height);
+  let fov = cam.fov;
+  const minH = 48 * DEG;
+  if (2 * Math.atan(Math.tan(fov / 2) * aspect) < minH) fov = 2 * Math.atan(Math.tan(minH / 2) / aspect);
+  m4Perspective(projM, Math.min(fov, 110 * DEG), aspect, 0.3, 8000);
+  m4LookAt(viewM, cam.p, cam.look, UP);
+  m4Mul(vpM, projM, viewM);
+  m4Invert(invVP, vpM);
+  frustumFrom(vpM, frustum);
+
+  updateTerrain(car.p.x, car.p.z, frustum, booting ? 16 : 5);
+  updateScatter(cam.p.x, cam.p.z);
+  updatePylons(car.p.x, car.p.z);
+  updateShadow();
+  const calls = render();
+  updateHud(dt);
+  updateAudio();
+
+  if (booting) {
+    maxPending = Math.max(maxPending, pendingCount);
+    const prog = 1 - pendingCount / maxPending;
+    barFill.style.width = Math.round(prog * 100) + '%';
+    statusEl.textContent = pendingCount ? 'GENERATING TERRAIN · ' + Math.round(prog * 100) + '%' : 'READY';
+    if (!ready && (pendingCount === 0 || performance.now() - bootStart > 12000) && frameNo > 3) {
+      ready = true;
+      goBtn.classList.add('ready');
+    }
+  } else if (showFps) {
+    hudFps.textContent = Math.round(1000 / ftAvg) + ' FPS · ' + calls + ' CH · Q' + quality.toFixed(2);
+  }
+}
+
+function start() {
+  if (!ready) return;
+  booting = false;
+  last = performance.now();
+  acc = 0;
+  bootEl.classList.add('gone');
+  setTimeout(() => { bootEl.style.display = 'none'; }, 700);
+  initAudio();
+  if (audio.ctx && audio.ctx.state === 'suspended') audio.ctx.resume();
+  setTimeout(() => { el('hint').style.opacity = '0'; }, 7000);
+}
+goBtn.addEventListener('click', start);
+goBtn.addEventListener('pointerdown', e => e.stopPropagation());
+
+el('b-res').addEventListener('click', () => resetCar(false));
+el('b-cam').addEventListener('click', e => {
+  cam.mode = (cam.mode + 1) % 3;
+  e.currentTarget.classList.toggle('on', cam.mode !== 0);
+});
+el('b-aud').addEventListener('click', e => {
+  audio.on = !audio.on;
+  initAudio();
+  if (audio.ctx && audio.ctx.state === 'suspended') audio.ctx.resume();
+  e.currentTarget.classList.toggle('on', audio.on);
+});
+el('b-tilt').addEventListener('click', e => {
+  if (input.tilt) { disableTilt(); e.currentTarget.classList.remove('on'); }
+  else { enableTilt(); e.currentTarget.classList.add('on'); }
+});
+el('b-aud').classList.add('on');
+addEventListener('keydown', e => { if (e.code === 'KeyF') { showFps = !showFps; if (!showFps) hudFps.textContent = ''; } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) last = performance.now(); });
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
