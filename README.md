@@ -101,13 +101,27 @@ open index.html          # or serve the directory, any static host works
 Deploying: the repo root is a static site with a single entry point, so Vercel
 (or any static host) needs no configuration.
 
-## Not done yet
+## Importing a vehicle mesh
 
-**Importing a real vehicle mesh.** The truck is hand-built from boxes. Dropping
-in an authored model (OBJ/GLB) needs the asset reachable from the build
-environment — a Drive link is not, so commit the model into the repo and it can
-be converted to the engine's interleaved `pos/normal/colour` vertex format,
-which is what `MB.upload()` already consumes.
+The truck in the game is hand-built from boxes, but an authored mesh can replace
+it. Commit the model to `assets/car.glb` (or `.obj`) and run:
+
+```
+node tools/import-model.mjs assets/car.glb
+```
+
+The importer parses glTF/GLB or OBJ+MTL with no dependencies, recovers the
+orientation (from the wheel layout when the wheels are named, otherwise from the
+bounding box), fits the model to the suspension geometry, decimates to a
+triangle budget by vertex clustering, and packs it as int16 positions / int8
+normals / uint8 colour — which decodes to exactly the interleaved layout
+`MB.upload()` already consumes, so the renderer needs no special case.
+
+See `assets/README.md` for the Blender export settings and the wheel naming
+convention. `tools/make-test-car.mjs` writes a fixture in both formats so the
+path can be verified without an authored asset.
+
+## Not done yet
 
 Terrain deformation from the tyres, other vehicles, weather, and a real
 soft-body sand response. The `road` is a colour-and-grade corridor rather than a

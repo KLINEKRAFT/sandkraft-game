@@ -244,6 +244,13 @@ canvas#gl{position:fixed;top:0;left:0;width:100%;height:100%;display:block;backg
    3  chunked quadtree LOD       7  main loop
    ========================================================================= */
 
+/* An authored vehicle mesh, packed by tools/import-model.mjs. Null until one
+   is imported, in which case the procedural body below is skipped. */
+/* ===IMPORTED-MODEL-BEGIN=== */
+const IMPORTED = null;
+/* ===IMPORTED-MODEL-END=== */
+const FIT = (IMPORTED && IMPORTED.fit) || { wheelR: 0.44, mountX: 0.80, mountZ: 1.475 };
+
 /* ---------------------------------------------------------------- 0 math */
 const clamp = (x, a, b) => x < a ? a : (x > b ? b : x);
 const mix = (a, b, t) => a + (b - a) * t;
@@ -1188,6 +1195,45 @@ MB.prototype.uploadInstanced = function (maxInst) {
   return m;
 };
 
+/* SKM1: int16 positions x scale, int8 normals, uint8 colour — unpacked into
+   the same interleaved pos/normal/colour layout MB.upload() produces. */
+function decodePacked(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const dv = new DataView(bytes.buffer);
+  if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'SKM1') throw new Error('bad model blob');
+  const verts = dv.getUint32(4, true) * 3, s = dv.getFloat32(8, true);
+  const out = new Float32Array(verts * 9);
+  let o = 12;
+  for (let i = 0; i < verts; i++) {
+    const b = i * 9;
+    out[b] = dv.getInt16(o, true) * s;
+    out[b + 1] = dv.getInt16(o + 2, true) * s;
+    out[b + 2] = dv.getInt16(o + 4, true) * s;
+    out[b + 3] = dv.getInt8(o + 6) / 127;
+    out[b + 4] = dv.getInt8(o + 7) / 127;
+    out[b + 5] = dv.getInt8(o + 8) / 127;
+    out[b + 6] = bytes[o + 9] / 255;
+    out[b + 7] = bytes[o + 10] / 255;
+    out[b + 8] = bytes[o + 11] / 255;
+    o += 12;
+  }
+  return out;
+}
+function uploadPacked(b64) {
+  const data = decodePacked(b64);
+  const vao = gl.createVertexArray(), vbo = gl.createBuffer();
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 36, 12);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 36, 24);
+  gl.bindVertexArray(null);
+  return { vao, vbo, count: data.length / 9 };
+}
+
 /* ---- rock: low-poly displaced sphere, flat shaded ---- */
 function rockMesh(seedOff) {
   const mb = new MB();
@@ -1260,6 +1306,11 @@ MESH.wreck = wreckMesh().uploadInstanced(8);
    ground at rest. Proportions follow a 4-door Bronco: 4.5 m long, 1.93 wide,
    1.88 to the roof, 2.95 m wheelbase. */
 (function buildCar() {
+  if (IMPORTED && IMPORTED.body) {
+    MESH.car = uploadPacked(IMPORTED.body);
+    if (IMPORTED.wheel) MESH.wheel = uploadPacked(IMPORTED.wheel);
+    if (MESH.car && MESH.wheel) return;
+  }
   const mb = new MB();
   const body   = [0.34, 0.41, 0.47];   // Area-51 grey-blue
   const roof   = [0.055, 0.055, 0.062];
@@ -1487,16 +1538,16 @@ const G = 9.81;
 const CARP = {
   mass: 2100,
   Ixx: 4650, Iyy: 4700, Izz: 1250,
-  wheelR: 0.44, susRest: 0.52, susTravel: 0.38,
+  wheelR: FIT.wheelR, susRest: 0.52, susTravel: 0.38,
   k: 36000, damp: 3100, antiRoll: 13000,
   bumpStop: 55000, bumpDamp: 7000, maxLoad: 46000,
   engine: 21500, vMax: 41, brake: 18000,
   maxSteer: 33 * DEG,
   mounts: [
-    { x: -0.80, y: 0.30, z: 1.475, steer: 1 },
-    { x: 0.80, y: 0.30, z: 1.475, steer: 1 },
-    { x: -0.80, y: 0.30, z: -1.475, steer: 0 },
-    { x: 0.80, y: 0.30, z: -1.475, steer: 0 }
+    { x: -FIT.mountX, y: 0.30, z: FIT.mountZ, steer: 1 },
+    { x: FIT.mountX, y: 0.30, z: FIT.mountZ, steer: 1 },
+    { x: -FIT.mountX, y: 0.30, z: -FIT.mountZ, steer: 0 },
+    { x: FIT.mountX, y: 0.30, z: -FIT.mountZ, steer: 0 }
   ]
 };
 const UP = v3(0, 1, 0), FWD = v3(0, 0, 1), RIGHT = v3(-1, 0, 0);
