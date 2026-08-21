@@ -73,13 +73,13 @@ const COMP = { 5120: [Int8Array, 1], 5121: [Uint8Array, 1], 5122: [Int16Array, 2
                5123: [Uint16Array, 2], 5125: [Uint32Array, 4], 5126: [Float32Array, 4] };
 const NCOMP = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
 
-function m4mul(a, b) {                       /* column-major, as in glTF */
+export function m4mul(a, b) {                       /* column-major, as in glTF */
   const o = new Array(16).fill(0);
   for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++)
     for (let k = 0; k < 4; k++) o[c * 4 + r] += a[k * 4 + r] * b[c * 4 + k];
   return o;
 }
-function trsToM4(t, r, s) {
+export function trsToM4(t, r, s) {
   const [x, y, z, w] = r;
   const x2 = x + x, y2 = y + y, z2 = z + z;
   const xx = x * x2, xy = x * y2, xz = x * z2, yy = y * y2, yz = y * z2, zz = z * z2;
@@ -102,7 +102,10 @@ const xformDir = (m, p) => [
   m[2] * p[0] + m[6] * p[1] + m[10] * p[2]
 ];
 
-export function parseGLTF(file) {
+/* Container + accessor reading, split out so the skinned-character importer can
+   share them: it needs indexed vertices in skin space, which is the opposite of
+   what parseGLTF below produces. */
+export function readGLTFContainer(file) {
   const buf = readFileSync(file);
   let json, bin = null;
   if (buf.readUInt32LE(0) === 0x46546c67) {               /* 'glTF' — binary */
@@ -125,13 +128,24 @@ export function parseGLTF(file) {
     throw new Error('this glTF uses meshopt compression — re-export without it');
 
   const dir = dirname(resolve(file));
-  const buffers = (json.buffers || []).map((b, i) => {
+  const buffers = (json.buffers || []).map((b) => {
     if (!b.uri) return bin;
     if (b.uri.startsWith('data:')) return Buffer.from(b.uri.slice(b.uri.indexOf(',') + 1), 'base64');
     return readFileSync(resolve(dir, decodeURIComponent(b.uri)));
   });
+  return { json, buffers, bin, dir };
+}
 
-  const readAccessor = (ai) => {
+/* raw bytes of a bufferView — for embedded texture images */
+export function viewBytes(json, buffers, vi) {
+  const bv = json.bufferViews[vi];
+  const src = buffers[bv.buffer];
+  const off = (bv.byteOffset || 0);
+  return src.subarray(off, off + bv.byteLength);
+}
+
+export function makeAccessorReader(json, buffers) {
+  return (ai) => {
     const acc = json.accessors[ai];
     const n = NCOMP[acc.type];
     const [Arr, sz] = COMP[acc.componentType];
@@ -151,6 +165,11 @@ export function parseGLTF(file) {
     }
     return out;
   };
+}
+
+export function parseGLTF(file) {
+  const { json, buffers } = readGLTFContainer(file);
+  const readAccessor = makeAccessorReader(json, buffers);
 
   /* flatten the node hierarchy to world transforms */
   const jobs = [];
