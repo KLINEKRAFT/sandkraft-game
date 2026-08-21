@@ -276,6 +276,29 @@ See `assets/README.md` for the Blender export settings and the wheel naming
 convention. `tools/make-test-car.mjs` writes a fixture in both formats so the
 path can be verified without an authored asset.
 
+## Importing a prop
+
+Rocks, cliffs, plants — anything you drive past or into — go through a second
+importer that registers them in the scatter and collision systems instead of
+replacing the car:
+
+```
+node tools/import-prop.mjs assets/mesa_01.glb --name=mesa01 --height=18 \
+     --tris=600 --scatter=rock --per-km2=25 --slope=12
+```
+
+Each prop carries its own mesh, a fitted stack of sphere colliders and the
+placement rules, all inside `index.html`, so adding a rock is an importer run
+rather than a code change. The origin is moved to the centre of the base
+because a prop is placed by its footprint; face normals are rebuilt outward by
+default, since flipped normals are the commonest export defect and they fail
+silently as an ambient-only grey cut-out; and the mean albedo is reported,
+because the prop shader adds a flat sky term that a dark mesh cannot overcome
+and baked photogrammetry is usually dark enough to drift cool.
+
+`tools/make-test-prop.mjs` writes a fixture — deliberately with its normals the
+wrong way round, so the guard has something to catch.
+
 ## Easter eggs
 
 Two, both at fixed coordinates, both findable by driving:
