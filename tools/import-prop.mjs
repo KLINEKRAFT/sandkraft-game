@@ -17,16 +17,25 @@
      --slope=14         steepest ground it will sit on, degrees
      --scale=1,1.6      instance scale range
      --clear=6          keep this many metres clear of the road
+     --weather=1        per-face bedding/varnish/dust, 0 to skip  (default 1)
+     --bands=3          collider spheres up the axis, for a tall prop
+     --spheres=14       cap on the fitted collider count
+     --grid[=N]         force the footprint-grid collider fit; N sets how many
+                        cells span the prop's long axis
+     --sink=0.03        bed this fraction of the prop's height into the ground
+     --texture=PATH     bake this image instead of the one the file names
+     --gzip             deflate the blob; the engine inflates it at boot
      --remove           delete this entry and write nothing else
      --dry              report the fit, write nothing
 
    The mesh needs per-vertex colour, not textures — this renderer has no
-   texture pipeline at all. Bake the albedo down to a Color Attribute in
-   Blender before exporting glTF and it comes through as COLOR_0. No
-   dependencies. */
+   texture pipeline at all. glTF carries that as COLOR_0; an FBX is read
+   straight from the pack and its texture is sampled through the UVs here, so
+   an asset pack needs no trip through Blender. No dependencies. */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { parseModel } from './parse-model.mjs';
 import { decimate, pack } from './pack-mesh.mjs';
+import { weather } from './weather.mjs';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const a = args.find(x => x.startsWith('--' + k + '=')); return a ? a.split('=')[1] : d; };
@@ -77,11 +86,13 @@ const PER_KM2 = +opt('per-km2', 40);
 const SLOPE = +opt('slope', 14);
 const CLEAR = +opt('clear', 6);
 const SCALE = opt('scale', '1,1.6').split(',').map(Number);
+const WEATHER = +opt('weather', 1);
+const GZIP = flag('gzip');
 if (!['hard', 'soft'].includes(KIND)) throw new Error('--kind must be hard or soft');
 if (!['rock', 'sand', 'both', 'none'].includes(SCATTER)) throw new Error('--scatter must be rock|sand|both|none');
 
 /* ---------------------------------------------------------------- load -- */
-const model = parseModel(file);
+const model = parseModel(file, { texture: opt('texture', null) });
 if (!model.parts.length) throw new Error('no triangles found in ' + file);
 let tris = model.parts.flatMap(p => p.tris);
 log(`${file}: ${model.parts.length} part(s), ${tris.length} triangles`);
@@ -174,6 +185,17 @@ function outwardness(ts) {
       (after < 0.25 ? '   *** still low: this mesh will light badly, check it in the viewer ***' : ''));
 }
 
+/* ------------------------------------------------------------ weather -- */
+/* A pack whose whole texture is one flat colour bakes to a mesh where every
+   face is identical, which flat-shaded reads as plastic. See weather.mjs. */
+{
+  const st = weather(tris, { amount: WEATHER });
+  if (st) log(`  weather  luminance ${st.before.mean.toFixed(3)} -> ${st.after.mean.toFixed(3)}` +
+              `, spread ${st.before.min.toFixed(2)}-${st.before.max.toFixed(2)}` +
+              ` -> ${st.after.min.toFixed(2)}-${st.after.max.toFixed(2)}`);
+  else log('  weather  skipped');
+}
+
 /* -------------------------------------------------------------- albedo -- */
 /* The prop shader adds a flat sky term on top of the albedo-modulated light,
    which is what stops unlit sides going pure black. The side effect is that a
@@ -202,13 +224,20 @@ const meanAlbedo = () => {
 }
 
 /* ------------------------------------------------------------ collider -- */
-/* Stack of spheres up the vertical axis. The car is an oriented box and
-   box-vs-sphere gives an exact closest point, depth and normal, so a few
-   spheres is all the impulse solver wants — and a percentile radius rather
-   than the maximum stops one stray spur inflating the whole hull. */
-function fitSpheres(ts, bands) {
-  const pts = ts.flatMap(t => t.p);
-  const top = Math.max(...pts.map(p => p[1])) || 1;
+/* The car is an oriented box and box-vs-sphere gives an exact closest point,
+   depth and normal, so a handful of spheres is all the impulse solver wants.
+   A percentile radius rather than the maximum stops one stray spur inflating
+   the whole hull.
+
+   Which arrangement of spheres, though, depends on the shape. A boulder is
+   about as wide as it is tall and a stack up the vertical axis fits it well.
+   A plateau is 52 m across and 20 m high, and the same stack gives it one
+   sphere of radius 25 — a dome you bounce off from 25 m out, having hit
+   nothing you can see. Anything appreciably wider than it is tall gets a grid
+   of columns over its footprint instead, each sized to its own cell and
+   dropped so its cap sits just under the local surface, which follows the
+   silhouette instead of swallowing it. */
+function stackFit(pts, top, bands) {
   const out = [];
   for (let b = 0; b < bands; b++) {
     const y0 = top * b / bands, y1 = top * (b + 1) / bands;
@@ -218,17 +247,108 @@ function fitSpheres(ts, bands) {
     for (const p of inBand) { cx += p[0]; cz += p[2]; }
     cx /= inBand.length; cz /= inBand.length;
     const rs = inBand.map(p => Math.hypot(p[0] - cx, p[2] - cz)).sort((a, b2) => a - b2);
-    const r = rs[Math.floor(rs.length * 0.90)];
-    const half = (y1 - y0) / 2;
-    out.push({ x: +cx.toFixed(3), y: +((y0 + y1) / 2).toFixed(3), z: +cz.toFixed(3),
-               r: +Math.max(r, half * 0.75).toFixed(3) });
+    const r = Math.max(rs[Math.floor(rs.length * 0.90)], (y1 - y0) / 2 * 0.75);
+    /* Keep the cap under the mesh. The band midpoint is the honest centre, but
+       on the top band a sphere wide enough to hold the rock's waist then
+       stands most of its radius above the summit — which is an invisible kerb
+       floating over a boulder you thought you had cleared. */
+    const y = Math.max(r * 0.25, Math.min((y0 + y1) / 2, top - r * 0.80));
+    out.push({ x: cx, y, z: cz, r });
   }
-  /* drop any band the one below already swallows */
-  return out.filter((s, i) => !out.some((o, j) =>
-    j !== i && Math.hypot(o.x - s.x, o.y - s.y, o.z - s.z) + s.r <= o.r * 1.02));
+  return out;
 }
-const spheres = fitSpheres(tris, 3);
-log(`  collider ${spheres.length} sphere(s): ${spheres.map(s => `r=${s.r}@y${s.y}`).join(' ')}`);
+
+/* Trimming to a budget by radius keeps the biggest spheres, which on a broad
+   hill are the ones in the middle — so the flanks lose their colliders and you
+   drive in through the side of it. Greedy set cover over the mesh's own
+   vertices keeps the spheres that hold parts nothing else holds, which is the
+   thing actually being bought. */
+function trimByCover(spheres, pts, max) {
+  if (spheres.length <= max) return { kept: spheres, dropped: 0 };
+  const step = Math.max(1, Math.floor(pts.length / 1500));
+  const sample = pts.filter((_, i) => i % step === 0);
+  const covered = new Uint8Array(sample.length);
+  const holds = (s, p) => (p[0]-s.x)**2 + (p[1]-s.y)**2 + (p[2]-s.z)**2 <= s.r * s.r;
+  const pool = spheres.slice(), kept = [];
+  while (kept.length < max && pool.length) {
+    let best = -1, bestGain = 0;
+    for (let i = 0; i < pool.length; i++) {
+      let gain = 0;
+      for (let k = 0; k < sample.length; k++) if (!covered[k] && holds(pool[i], sample[k])) gain++;
+      if (gain > bestGain) { bestGain = gain; best = i; }
+    }
+    if (best < 0) break;
+    const s = pool.splice(best, 1)[0];
+    kept.push(s);
+    for (let k = 0; k < sample.length; k++) if (!covered[k] && holds(s, sample[k])) covered[k] = 1;
+  }
+  return { kept, dropped: spheres.length - kept.length };
+}
+/* Cells have to be square, not `footprint / G` on each axis independently: a
+   39 m x 13 m ridge split 4 x 4 gives 9.7 x 3.3 cells, and a sphere that fits
+   the short side of one leaves two thirds of the long side uncovered. Size the
+   cell once — around the mesh's own height, since that is the scale its relief
+   varies at — and derive the counts from it. */
+function gridFit(pts, top, longCells, lo, hi, budget) {
+  const out = [];
+  const W = hi[0] - lo[0], D = hi[2] - lo[2], long = Math.max(W, D, 1e-3);
+  /* Size the cell from the sphere budget rather than from the mesh: aiming at
+     roughly 0.7 cells per sphere leaves room for the second, lower sphere a
+     tall cell adds, and for the ones the dedup and the cover pass throw away. */
+  const cell = longCells > 1 ? long / longCells
+    : Math.max(long / 12, Math.sqrt(W * D / Math.max(2, budget * 0.7)));
+  const Gx = Math.max(1, Math.round(W / cell)), Gz = Math.max(1, Math.round(D / cell));
+  const sx = W / Gx, sz = D / Gz;
+  const halfDiag = Math.hypot(sx, sz) / 2;
+  for (let i = 0; i < Gx; i++) for (let j = 0; j < Gz; j++) {
+    const x0 = lo[0] + sx * i, z0 = lo[2] + sz * j;
+    const inCell = pts.filter(p => p[0] >= x0 - 1e-6 && p[0] <= x0 + sx + 1e-6 &&
+                                   p[2] >= z0 - 1e-6 && p[2] <= z0 + sz + 1e-6);
+    if (inCell.length < 3) continue;
+    const ys = inCell.map(p => p[1]).sort((a, b) => a - b);
+    const ytop = ys[Math.floor(ys.length * 0.92)];
+    if (ytop < top * 0.06) continue;                   /* a lip of apron, not the body */
+    const cx = x0 + sx / 2, cz = z0 + sz / 2;
+    const r = Math.min(halfDiag, Math.max(ytop * 0.55, halfDiag * 0.55));
+    /* sit the cap just under the local surface rather than on it — a sphere
+       that covers a square cell has to bulge past its corners, and bulging
+       upward is what makes an invisible kerb */
+    let y = ytop - r * 0.80;
+    out.push({ x: cx, y, z: cz, r });
+    if (ytop > r * 2.4) out.push({ x: cx, y: Math.max(r * 0.7, y - r * 1.25), z: cz, r });
+  }
+  return out;
+}
+function fitSpheres(ts, opts = {}) {
+  const pts = ts.flatMap(t => t.p);
+  const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  for (const p of pts) for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], p[a]); hi[a] = Math.max(hi[a], p[a]); }
+  const top = hi[1] || 1;
+  const wide = Math.max(hi[0] - lo[0], hi[2] - lo[2]);
+  const max = opts.max === undefined ? 14 : opts.max;
+  if (max <= 0) return { how: 'none', dropped: 0, spheres: [] };
+  let out, how;
+  if (opts.grid || wide > top * 2.2) {
+    out = gridFit(pts, top, opts.grid > 1 ? opts.grid : 0, lo, hi, max);
+    how = `${out.length}-cell grid`;
+  } else {
+    out = stackFit(pts, top, opts.bands || 3);
+    how = 'stack';
+  }
+  /* drop any sphere another already swallows, then keep the largest few — the
+     broad phase is per-collider, so this is a per-instance cost every substep */
+  out = out.filter((s, i) => !out.some((o, j) =>
+    j !== i && Math.hypot(o.x - s.x, o.y - s.y, o.z - s.z) + s.r <= o.r * 1.02));
+  const { kept, dropped } = trimByCover(out, pts, max);
+  out = kept;
+  return { how, dropped, spheres: out.map(s => ({
+    x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), r: +s.r.toFixed(3) })) };
+}
+const fit = fitSpheres(tris, { bands: +opt('bands', 3), max: +opt('spheres', 14),
+                               grid: flag('grid') ? 1 : +opt('grid', 0) });
+const spheres = fit.spheres;
+log(`  collider ${spheres.length} sphere(s), ${fit.how}` + (fit.dropped ? `, ${fit.dropped} dropped` : '') +
+    `: ${spheres.map(s => `r=${s.r}@y${s.y}`).join(' ')}`);
 
 /* ------------------------------------------------------------- reduce --- */
 const before = tris.length;
@@ -236,7 +356,7 @@ tris = decimate(tris, TRIS);
 log(`  mesh     ${before} -> ${tris.length} triangles`);
 
 const entry = {
-  mesh: pack(tris),
+  mesh: pack(tris, { gzip: GZIP }),
   tris: tris.length,
   spheres,
   kind: KIND,
@@ -246,6 +366,10 @@ const entry = {
   scale: [SCALE[0], SCALE[1] ?? SCALE[0]],
   roadClear: CLEAR,
   height: +hi[1].toFixed(2),
+  /* the world needs the footprint to judge the ground under a wide prop, and
+     how far to bed it in so its base does not stand proud on a slope */
+  foot: +(Math.max(hi[0] - lo[0], hi[2] - lo[2]) / 2).toFixed(2),
+  sink: +opt('sink', 0.03),
   source: file.split('/').pop()
 };
 table[NAME] = entry;
