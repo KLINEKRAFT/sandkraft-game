@@ -1,4 +1,4 @@
-# SANDKRAFT
+# Bronco Roam
 
 A static procedural desert you can drive, in one HTML file. No build step, no
 dependencies, no network calls — open `index.html` and go.
@@ -210,18 +210,66 @@ hard lip. Measured over 45 s of full-throttle driving, that yields 5–13 jumps
 with 1.4–3.8 s of hangtime. An airborne leveling torque helps you land flat,
 and anything still inverted after 1.9 s is set back on its wheels.
 
-**Cover** — two treatments, picked by orientation. In **portrait** (phones) it
-is the painted cover art, embedded as a 75 KB WebP data URI and slowly
-Ken-Burnsed. The art is 9:16 but modern iPhones are roughly 9:19.5, so
-`background-size: cover` would crop about 8.6% off each side and clip the
-wordmark; instead the encoder pads the artwork out to a tall-phone aspect by
-stretching its top row of sky and bottom row of sand, so the crop eats padding
-rather than art. In **landscape** it is the live engine — the camera orbits the
-parked truck at the (flattest-ground) spawn while sand streams past on the wind,
-and on TAP TO DRIVE it blends over to the chase view.
+**Cover** — the live engine, in both orientations. The camera orbits the parked
+truck at the (flattest-ground) spawn while sand streams past on the wind, the
+Outdoorsman stands beside it, and the wordmark drops in overhead; on TAP TO
+DRIVE the camera blends over to the chase view and the words go back up the way
+they came.
+
+The painted cover art is the curtain rather than the cover. It is a 75 KB WebP
+data URI, so it is on screen before a single chunk of terrain exists, and it
+dissolves into the live scene at the same moment the black curtain does.
+Portrait only — the art is 9:16, but modern iPhones are roughly 9:19.5, so
+`background-size: cover` would crop about 8.6% off each side; the encoder pads
+the artwork out to a tall-phone aspect by stretching its top row of sky and
+bottom row of sand, so the crop eats padding rather than art.
+
+The **wordmark** is a real 12,068-triangle mesh in the scene rather than styled
+text, so it is dented by the same tonemap as everything behind it and can be
+animated in three dimensions. Three things about it were not obvious.
+
+Where it goes is CSS's problem. The layout that sized the HTML wordmark —
+clamped to the viewport, inside the safe-area insets, one size in portrait and
+another in landscape — was already right, so the glyph spans stay in the
+document with their ink hidden and the mesh is flown to the rectangle they
+ended up occupying. One layout to maintain instead of two that have to agree.
+The size comes off the spans' *height*, not their width, because the two are
+different drawings of the same words: the mesh is a fatter face and its bevels
+stand outside the glyphs, so fitting the widths made it a third taller than the
+type it replaced. And the height comes off one line rather than the union of
+the spans, because on a phone the type wraps to two lines and the mesh never
+does.
+
+It carries its own three-point light rig, keyed off the camera. Lit by the
+world's sun it bleached out on one side of the orbit and went to silhouette on
+the other, and the sky ambient — the right answer for a rock — turned the dark
+brown bevels blue-grey. Measured all the way round the orbit, the face now
+holds within a few counts of the artwork's own (200, 191, 170) and the bevel
+within a few of its (58, 40, 28).
+
+And it is not decimated. A triangle budget on extruded text is a legibility
+question rather than a silhouette one — vertex clustering pulls the boundary of
+a letter inward wherever the outline curves tighter than a cell, so counters
+fill in and the crowns go lumpy long before a budget would notice. Compression
+is the better trade, because it costs the letterforms nothing: the blob is
+stored gzipped and inflated by the browser's own `DecompressionStream`, which
+takes it 4.1x down — better than decimating to a quarter would have saved, at
+full quality. Without `DecompressionStream` the HTML wordmark is still in the
+document, so it simply stays.
 
 Cover and HUD are both laid out inside the safe-area insets and verified against
 simulated iPhone notch/home-indicator geometry.
+
+**The Outdoorsman** — a rigged, skinned character imported from
+`assets/outdoorsman.glb`, 1,781 triangles over 22 joints, with an idle and a
+wave. He stands beside the truck on the cover, turns to face wherever the
+camera has orbited to, and waves every seven to twelve seconds. The skinning
+matrix is built by weighting whole 4x4s rather than skinning three times and
+blending, which is one matrix multiply per vertex; rotations blend with nlerp
+and a sign flip onto the shorter arc, without which a cross-fade out of the
+wave takes the long way round and the arm swings through his chest. His yaw is
+slewed rather than snapped, at 2.2/s, which reads as him watching you and
+cannot pop when the shortest arc changes sign.
 
 **Phone-first details** — every inset goes through `--sat/--sab/--sal/--sar`,
 so a test can simulate a notched phone and assert that nothing lands outside
@@ -237,8 +285,14 @@ fallback) that reacts to sustained frame time.
 open index.html          # or serve the directory, any static host works
 ```
 
-`index.html` is ~450 KB: the packed vehicle mesh plus the embedded cover art.
-It is still one file with no build step and no runtime fetches.
+`index.html` is ~842 KB, most of it packed geometry: the vehicle, the
+Outdoorsman, the wordmark, and the embedded cover art. Still one file, no build
+step, no runtime fetches.
+
+It also installs to an iPhone home screen. Safari's Share → Add to Home Screen
+picks up the `apple-touch-icon` and the `apple-mobile-web-app-*` meta tags, and
+it launches full-screen with no browser chrome — no manifest and no service
+worker involved, because there is nothing to fetch.
 
 Deploying: the repo root is a static site with a single entry point, so Vercel
 (or any static host) needs no configuration.
@@ -298,6 +352,35 @@ and baked photogrammetry is usually dark enough to drift cool.
 
 `tools/make-test-prop.mjs` writes a fixture — deliberately with its normals the
 wrong way round, so the guard has something to catch.
+
+## Importing a character
+
+A rigged, animated mesh — skin, skeleton and clips — goes through a third
+importer, which bakes its baseColor texture down to vertex colours (there is no
+texture pipeline here), decimates skin-aware, and packs the lot as SKC1:
+
+```
+node tools/import-character.mjs assets/outdoorsman.glb --tris=1800 --albedo=0.17
+node tools/verify-character.mjs                       # rest pose and every clip
+```
+
+`verify-character.mjs` decodes the blob with a decoder written from the format
+spec rather than shared with the engine's, skins on the CPU and rasterises it
+into a 2D canvas — so if the two agree the format is unambiguous, and a wrecked
+silhouette or a bad bake shows up before any of it reaches a shader.
+
+## Importing the wordmark
+
+```
+node tools/import-title.mjs assets/bronco_roam_title.glb --albedo=0.42
+node tools/verify-title.mjs                            # renders it at cover size
+```
+
+Node transforms are ignored: the object rotation on an authored wordmark is the
+tilt its cover render was framed at, and baking it in would leave the engine
+with no upright rest pose to animate a drop-in from. The triangles come back
+sorted into word groups, split at the gaps in the occupied X range, so the
+engine can stagger them.
 
 ## Easter eggs
 

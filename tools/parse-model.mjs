@@ -1,4 +1,4 @@
-/* Mesh readers for the SANDKRAFT importer: OBJ (+MTL) and glTF/GLB.
+/* Mesh readers for the Bronco Roam importer: OBJ (+MTL) and glTF/GLB.
    Both return the same shape:
      { parts: [ { name, tris: [{p:[3][3], n:[3][3]|null, c:[r,g,b]}] } ] }
    No dependencies — this runs on a bare node. */

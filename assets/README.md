@@ -168,3 +168,32 @@ Imported with:
 ```
 node tools/import-model.mjs assets/bronco_engine.glb --as-is --track=1.64
 ```
+
+`outdoorsman.glb` — the man on the cover. Rigged and skinned, 22 joints, with
+an `Idle` and a `Wave` clip and a baseColor texture, which the importer bakes
+down to vertex colours.
+
+```
+node tools/import-character.mjs assets/outdoorsman.glb --tris=1800 --albedo=0.17
+```
+
+`--albedo=0.17` is not a mistake and not a guess: the truck's own mean albedo
+is 0.086 luminance, and a character imported at the 0.38 his texture bakes to
+tonemaps to a pale cut-out standing next to it. Measured, not eyeballed —
+twice I convinced myself an imported mesh was rendering the wrong colour
+entirely, and both times sampling the actual pixels at matched range and
+lighting said it was fine.
+
+`bronco_roam_title.glb` — the 3D wordmark, extruded text with three materials
+(face, bevel, extrusion side). One object, one mesh, no animation; the drop-in
+is the engine's. Its object rotation is the tilt the cover render was framed
+at, and the importer ignores it.
+
+```
+node tools/import-title.mjs assets/bronco_roam_title.glb --albedo=0.42
+```
+
+Keep the word spaces wider than any gap between letters — the importer splits
+the wordmark into word groups by sweeping the occupied X range, and reports
+how many it found, so a wordmark that comes back as one group is telling you
+the tracking is too tight to stagger.

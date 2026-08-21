@@ -82,7 +82,7 @@ for (const o of objects) {
 }
 const bin = Buffer.concat(chunks);
 const json = Buffer.from(JSON.stringify({
-  asset: { version: '2.0', generator: 'sandkraft test fixture' },
+  asset: { version: '2.0', generator: 'bronco-roam test fixture' },
   scene: 0, scenes: [{ nodes: nodes.map((_, i) => i) }],
   nodes, meshes, materials, accessors, bufferViews, buffers: [{ byteLength: bin.length }]
 }), 'utf8');
