@@ -35,8 +35,55 @@ geometry.
   a steep lee slip face. That asymmetry is what reads as *dune* rather than
   *hill*. Typical faces land near 32°, the tallest near 42°.
 - a dune-field mask, so roughly a third of the world is flat pan
+- a bedrock layer of mesas and buttes (below), on about a sixth of the world
+- dry washes: broad flat-floored channels scoured through the sand
 - a graded corridor blended in along the road, so the track is genuinely
   flatter and faster than the sand around it
+
+**Bedrock** — the dune field is one biome; Mojave sandstone is the other. Where
+a very low-frequency noise field survives above a threshold, rock stands proud
+of the sand as a butte with a flat cap.
+
+The cliffs come from *terracing*, not from the mask. A plain smoothstep flank
+spreads the relief over about 100 m, which is a talus slope — a hill, not a
+mesa. Quantising it into three steps with narrow risers turns two thirds of the
+relief into near-vertical bands and leaves the rest as benches, which is both
+what a real butte looks like and what makes it climbable at all: you pick your
+way up the benches instead of driving at a wall. The mask has to *saturate*
+well inside the butte, too — the cap is everything past the climb, so a mask
+that never reaches 1 gives a summit rather than a plateau and the whole thing
+reads as a wedge.
+
+Three noise fields keep them from looking machined. A domain warp before the
+finer octaves gives the outline the lobes and re-entrants that jointed rock
+erodes into, instead of a melted lozenge. The width of the climb varies over
+~170 m — shorter than a butte is wide — so a butte is sheer on some sides and
+walkable on others rather than uniformly one or the other. And the step
+boundaries wander, because terracing a radially symmetric climb rings the whole
+butte with contours at identical heights, which reads as a stack of pancakes.
+A fourth, very slow field scales the height, so alongside 60 m walls you cannot
+climb there are 12 m benches you can drive straight onto.
+
+Measured over a 6 km square: bedrock on 16.9% of the world, median relief 36 m
+and up to 83 m, median slope on rock 6.2° (the caps) with the top decile at 46°
+and cliff bands to 77°. The sand is untouched — 15.6° median, unchanged.
+
+Washes are cut wide and shallow rather than as canyons, because in a real
+desert they are the roads. A wash is scoured, so it flattens the dunes inside
+it as well as cutting: without that, a 6 m channel is invisible against 30 m
+dunes and the feature reads as nothing at all.
+
+Rock shades differently everywhere it matters: no wind ripples, no glitter, no
+tyre tracks (you cannot rut sandstone), a coarse non-directional relief in
+place of the ripple normal, sedimentary banding, and desert varnish streaking
+down the steep faces. Two things about that banding were not obvious. It has to
+be a *face* phenomenon — modulating the colour everywhere paints stripes across
+the flat cap too, which reads as a candy cane — so it fades out as the surface
+turns skyward, and it swings about one base colour rather than between two, so
+a formation keeps one identity top to bottom. And the rock has to be far darker
+than physical intuition suggests: this sand's albedo is a stylised 0.80, and at
+0.325 the rock still tonemapped to "slightly darker sand". At 0.17 it finally
+reads as rock.
 
 **LOD** — a distance-split quadtree, 24×24 cells per node, from 3072 m nodes
 down to 48 m (2 m cells under the wheels), out to a 2.6 km cull. Nodes are
@@ -94,6 +141,13 @@ towards the rut's centre line off a central difference. The height field is not
 touched, so a rut is shading, not geometry — you cannot get stuck in your own
 tracks.
 
+**Camera** — the chase camera clamps above the ground beneath it, which is
+enough among dunes. A mesa wall is vertical, though, and would leave the camera
+on the far side of it looking at rock, so the segment back to the truck is
+marched and the camera stops at the first sample the terrain is above. Measured
+over a minute of open-desert driving it pulls in on 11% of frames, to 90% of
+nominal on average, with no frame-to-frame jump large enough to read as a snap.
+
 **Landmarks** — seeded rock scatter (rejected on slopes too steep to sit on), a
 pylon line with sagging wire running beside the road, and three half-buried
 wrecks placed on the flattest ground near their seed points. Without them an
@@ -126,6 +180,12 @@ vertices are pushed in with a squared falloff, and every triangle that moved has
 its flat normal rebuilt so the dent catches the light. A clean copy of the mesh
 is kept so RESET can beat them back out. The automatic reset after a roll does
 not repair, or you could undo damage by flipping on purpose.
+
+Driving off a butte is its own hazard: measured over 45 s runs, air time is
+now up to 41% with drops of 29 m, against 11 m before, and every run ends up
+inverted at some point rather than about half of them. The auto-recovery after
+1.9 s handles it. Twenty-eight scripted runs off and into 60 m walls produced no
+NaN, no tunnelling and nothing stuck.
 
 **Ramps** — on top of the dune field sits a sparse *kicker* layer: a second
 directional profile with a 78/22 split, so it is nearly all run-up and then a
