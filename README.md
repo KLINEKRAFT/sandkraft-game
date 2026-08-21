@@ -160,6 +160,23 @@ so there is no physics library here either. Boulders are hard (restitution 0.18,
 they stop you) and oil drums are dynamic: 55 kg against 2100, so a 60 mph hit
 launches one at 34 m/s while the truck barely slows.
 
+Joshua trees are the plant that says Mojave rather than Sahara, and they are
+built rather than modelled: a trunk that forks three times, each fork tilting
+further from vertical, ending in spiky crowns. Two things kept the cost down.
+The crowns started as rings of little cones — the honest shape, and 250 of the
+plant's 456 triangles — and are now jittered bipyramids with alternating long
+and short points around the equator, which is 16 triangles that still read as a
+pom-pom rather than as the green crate a uniform ring gives. That bought the
+budget for a third level of forking, which is what makes the silhouette read.
+314 triangles, and they behave like saguaros when you hit one: coasting head-on
+at 45 mph leaves 24 mph and snaps the trunk.
+
+They favour the gravel apron around the buttes, gated on the rock mask, so the
+two biomes meet in a band of vegetation instead of a hard edge — measured at
+120 per km² near rock against 52 out in open sand, peaking at 66 instances of a
+128 cap, so none of them pop. They only instance inside a 340 m disc rather
+than the full prop radius: a 314-triangle tree at 500 m is a smudge.
+
 Saguaros are soft, which takes two mechanisms rather than one. Their normal
 impulse is capped, so the plant yields rather than cancelling two tonnes of
 momentum — but a cap alone re-fires every substep and stops the truck by
