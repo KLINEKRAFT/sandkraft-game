@@ -78,9 +78,15 @@ infinite desert reads as broken rather than vast.
 the body as an oriented box. Box-vs-sphere gives an exact closest point, a
 penetration depth and a normal in a dozen lines, which is all an impulse needs —
 so there is no physics library here either. Boulders are hard (restitution 0.18,
-they stop you), saguaros are soft (0.05, they scrub speed and let you through),
-and oil drums are dynamic: 55 kg against 2100, so a 60 mph hit launches one at
-34 m/s while the truck barely slows.
+they stop you) and oil drums are dynamic: 55 kg against 2100, so a 60 mph hit
+launches one at 34 m/s while the truck barely slows.
+
+Saguaros are soft, which takes two mechanisms rather than one. Their normal
+impulse is capped, so the plant yields rather than cancelling two tonnes of
+momentum — but a cap alone re-fires every substep and stops the truck by
+attrition instead. So past the yield threshold the stem also *snaps*: the
+collider stops colliding, the instance stops being drawn, and debris flies.
+Coasting head-on at 45 mph leaves 16 mph, against 1.4 for a boulder.
 
 The three wreck sites are solid too — as posts, so you can still thread the
 hangar lengthwise but not drive through its sides. Their colliders anchor to
