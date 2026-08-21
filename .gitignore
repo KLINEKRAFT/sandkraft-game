@@ -2,3 +2,14 @@
 undefined/
 node_modules/
 *.png.tmp
+
+# licensed asset packs: the derived geometry ships inside index.html,
+# the source packs are not ours to redistribute
+assets/packs/
+
+# renders the verify tools write next to the file they check
+/character.png
+/title.png
+/props.png
+/audio.png
+/verify-*.png

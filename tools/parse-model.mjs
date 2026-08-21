@@ -4,6 +4,7 @@
    No dependencies — this runs on a bare node. */
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { parseFBX } from './parse-fbx.mjs';
 
 /* ------------------------------------------------------------------ OBJ -- */
 function parseMTL(file) {
@@ -223,9 +224,10 @@ export function parseGLTF(file) {
   return { parts };
 }
 
-export function parseModel(file) {
+export function parseModel(file, opts = {}) {
   if (/\.obj$/i.test(file)) return parseOBJ(file);
   if (/\.(gltf|glb)$/i.test(file)) return parseGLTF(file);
+  if (/\.fbx$/i.test(file)) return parseFBX(file, opts);
   if (/\.blend$/i.test(file))
     throw new Error('.blend is Blender’s internal format and cannot be read here — export GLB or OBJ instead');
   throw new Error('unsupported model format: ' + file);
