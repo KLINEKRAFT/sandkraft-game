@@ -1,0 +1,4 @@
+# scratch output from the headless test scripts
+undefined/
+node_modules/
+*.png.tmp
