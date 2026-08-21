@@ -211,24 +211,32 @@ time you drive back into it. The transmission line stops at the town boundary:
 a 7.6 m lattice pylon is not what runs down a main street, and breaking the run
 reads as it terminating at a substation out of sight.
 
-They are boxes for now — placeholders for an authored city pack, authored in
-metres with the origin at the base and +Z facing the street, which is the
-convention the prop importer already uses, so the real facades drop into the
-same slots.
+Eight kinds of building, imported from Crayon City Architecture: two
+storefronts, two blocks, three for the outskirts, and one tower that turns up
+about twice in the whole town. They are placed by their **facade line** rather
+than by their centre — these run 3.3 to 11.4 m deep, and a constant centre
+offset would put the market's face a metre into the road and the tower's five
+metres back from it. A constant facade offset is what a street is.
 
-Their colours are the one thing that had to be derived rather than chosen.
-`MESH_FS` lights a prop as `vCol * (SUN_COL * 2.40 * sun + amb)`, so a sunlit
-face multiplies its albedo by nearly two and a half before ACES sees it: at
-0.32 every wall in town tonemapped to 0.88 and the place was a row of white
-cut-outs. Halving it barely helped, which was the useful failure — ACES
-compresses so hard up there that 0.32 and 0.24 land 5% apart. The problem was
-never brightness. Pale stucco and this sand are the *same colour*,
-(232,205,170) against (222,205,175), and the town was dissolving into the
-ground it stood on. What fixed it was hue and value separation: four body
-colours instead of two shades of cream, and only the trim allowed anywhere
-near the sand's value.
+The procedural boxes they replaced are still in the file as the fallback, and
+still what you get if the import is removed — the same arrangement `buildCar()`
+has. The slot is resolved through a getter rather than captured once, because a
+gzipped blob is inflated asynchronously and lands a moment after boot; cache it
+at init and the town is boxes forever.
 
-**Traffic** — fourteen cars going about their business on the grid, and this is
+The one thing that had to be derived rather than chosen was albedo, and it cost
+two wrong answers to get there. `MESH_FS` lights a prop as
+`vCol * (SUN_COL * 2.40 * sun + amb)`, so a sunlit face multiplies its albedo by
+nearly two and a half before ACES sees it: at 0.32 every wall tonemapped to 0.88
+and the place was a row of white cut-outs. Halving it barely helped, which was
+the useful failure — ACES compresses so hard up there that 0.32 and 0.24 land
+5% apart. The problem was never brightness. Pale stucco and this sand are the
+*same colour*, (232,205,170) against (222,205,175), and the town was dissolving
+into the ground it stood on. Everything now normalises to 0.18, and the packs'
+own dozen-odd material colours do the separating.
+
+**Traffic** — fourteen cars going about their business on the grid — sedan,
+hatchback, SUV, pickup and van — and this is
 the oil-drum system with somewhere to be. A drum is already a dynamic body the
 truck's box collides with, knocked by a proper mass ratio and left to settle,
 so a traffic car is that with 1300 kg instead of 55, three spheres instead of
@@ -237,6 +245,13 @@ something hits them: steering a full vehicle model for each would cost more
 than the player's truck and look worse, and the moment you touch one it stops
 being driven and becomes a free body, which is the only moment anybody is
 looking closely.
+
+Every dimension the collision maths needs is read off the import rather than
+kept in a table: a sedan is 4.8 m long and a pickup 6.2, and the code was
+originally written against one hardcoded set of half-extents, which crushed a
+van through a sedan-sized footprint and left the pickup's back half untouched.
+The importer records the mesh's extents in the payload, so re-importing a
+different body just works.
 
 You can flatten them, and getting that right took the one change that was not
 an extension of something. The suspension only ever asks the height field,
@@ -611,8 +626,9 @@ moon, which on a map made mostly of ramps is the only cheat worth having.
 
 ## Not done yet
 
-Night, a real soft-body sand response, and authored buildings — the town is
-boxes until the city pack is imported. Building colliders are a 3x2 of spheres
+Night, a real soft-body sand response, and street furniture — the town has
+buildings and traffic but no road surface geometry, kerbs or signage yet; the
+Quaternius modular street pack is the obvious next import. Building colliders are a 3x2 of spheres
 fitted so their overhang is identically zero, which leaves a gap instead: about
 1.2 m at a corner, 1.6 on the shed. A sphere cannot cover a box corner without
 overhanging its faces, and clipping a corner is the right way round to be wrong
