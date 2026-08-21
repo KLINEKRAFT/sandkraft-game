@@ -74,6 +74,34 @@ pylon line with sagging wire running beside the road, and three half-buried
 wrecks placed on the flattest ground near their seed points. Without them an
 infinite desert reads as broken rather than vast.
 
+**Things you hit** — every obstacle is approximated as one or more spheres, and
+the body as an oriented box. Box-vs-sphere gives an exact closest point, a
+penetration depth and a normal in a dozen lines, which is all an impulse needs —
+so there is no physics library here either. Boulders are hard (restitution 0.18,
+they stop you) and oil drums are dynamic: 55 kg against 2100, so a 60 mph hit
+launches one at 34 m/s while the truck barely slows.
+
+Saguaros are soft, which takes two mechanisms rather than one. Their normal
+impulse is capped, so the plant yields rather than cancelling two tonnes of
+momentum — but a cap alone re-fires every substep and stops the truck by
+attrition instead. So past the yield threshold the stem also *snaps*: the
+collider stops colliding, the instance stops being drawn, and debris flies.
+Coasting head-on at 45 mph leaves 16 mph, against 1.4 for a boulder.
+
+The three wreck sites are solid too — as posts, so you can still thread the
+hangar lengthwise but not drive through its sides. Their colliders anchor to
+the ground under each post rather than to the model origin, and any post the
+dunes have swallowed is skipped, so a buried frame never leaves invisible
+things to crash into.
+
+**Damage** — impact energy accumulates into a hull percentage that costs you
+engine power and bends the steering towards whichever side took the hits. The
+panels actually deform: the impact point is transformed into body space, nearby
+vertices are pushed in with a squared falloff, and every triangle that moved has
+its flat normal rebuilt so the dent catches the light. A clean copy of the mesh
+is kept so RESET can beat them back out. The automatic reset after a roll does
+not repair, or you could undo damage by flipping on purpose.
+
 **Ramps** — on top of the dune field sits a sparse *kicker* layer: a second
 directional profile with a 78/22 split, so it is nearly all run-up and then a
 hard lip. Measured over 45 s of full-throttle driving, that yields 5–13 jumps
@@ -145,6 +173,13 @@ normals / uint8 colour — which decodes to exactly the interleaved layout
 See `assets/README.md` for the Blender export settings and the wheel naming
 convention. `tools/make-test-car.mjs` writes a fixture in both formats so the
 path can be verified without an authored asset.
+
+## Easter eggs
+
+Two, both at fixed coordinates, both findable by driving:
+
+- a stack of drums parked on the road shoulder about 800 m north of the spawn
+- somebody left a hat on a cactus, out past the first wreck
 
 ## Not done yet
 
