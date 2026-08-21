@@ -82,6 +82,12 @@ they stop you), saguaros are soft (0.05, they scrub speed and let you through),
 and oil drums are dynamic: 55 kg against 2100, so a 60 mph hit launches one at
 34 m/s while the truck barely slows.
 
+The three wreck sites are solid too — as posts, so you can still thread the
+hangar lengthwise but not drive through its sides. Their colliders anchor to
+the ground under each post rather than to the model origin, and any post the
+dunes have swallowed is skipped, so a buried frame never leaves invisible
+things to crash into.
+
 **Damage** — impact energy accumulates into a hull percentage that costs you
 engine power and bends the steering towards whichever side took the hits. The
 panels actually deform: the impact point is transformed into body space, nearby

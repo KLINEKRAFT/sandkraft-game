@@ -1617,6 +1617,31 @@ function updateProps(px, pz) {
     }
   }
 
+  /* the wrecks are the biggest things out here and were driveable-through.
+     The frame is posts, so posts are what you hit — you can still thread the
+     hangar lengthwise, you just cannot go through the sides. */
+  for (const s of WRECK_SITES) {
+    if (Math.hypot(s.x - px, s.z - pz) > 260) continue;
+    const c = Math.cos(s.rot), sn = Math.sin(s.rot), S = 2.1;
+    /* Anchor each collider to the ground under that post rather than to the
+       model origin, and skip any post the dunes have swallowed — otherwise a
+       buried frame leaves invisible things to crash into. */
+    const post = (lx, lz, topLocalY, r) => {
+      const x = (lx * c + lz * sn) * S + s.x;
+      const z = (-lx * sn + lz * c) * S + s.z;
+      const g = heightAt(x, z);
+      if (s.y + topLocalY * S < g + 0.6) return;         /* under the sand */
+      colliders.push({ x, y: g + 0.8, z, r: r * S, kind: HARD });
+    };
+    for (const lx of [-4.2, 4.2])
+      for (const lz of [-8, -4, 0, 4, 8]) post(lx, lz, 5.8, 0.34);
+    post(-4.6, -2, 4.25, 0.5);                  /* fallen wall */
+    post(-4.6, 3.5, 4.25, 0.5);
+    post(-7.5, 6.0, 1.4, 0.8);                  /* crates */
+    post(-6.2, 8.2, 1.2, 0.7);
+    post(6.5, -6.5, 3.2, 0.55);                 /* stub tower */
+  }
+
   /* hand-placed props */
   for (const p of LANDMARK_PROPS) {
     if (Math.hypot(p.x - px, p.z - pz) > 900) continue;
@@ -1929,12 +1954,11 @@ const WRECK_SITES = [
       }
     }
     s.x = bx; s.z = bz;
-    let minH = 1e9;
-    for (let a = 0; a < 8; a++) {
-      const t = a / 8 * 6.283;
-      minH = Math.min(minH, heightAt(s.x + Math.cos(t) * 19, s.z + Math.sin(t) * 19));
-    }
-    s.y = minH - 2.2;
+    /* Sink it relative to the ground it actually stands on. Taking the minimum
+       of a ring buried the whole structure whenever the site sat on any slope —
+       the ring low point can be metres under the centre. */
+    s.y = heightAt(s.x, s.z) - 1.3;
+    s.ground = heightAt(s.x, s.z);
     const o = i * 8;
     m.data[o] = s.x; m.data[o + 1] = s.y; m.data[o + 2] = s.z; m.data[o + 3] = 2.1;
     m.data[o + 4] = s.rot; m.data[o + 5] = 1; m.data[o + 6] = 2.1; m.data[o + 7] = 0;
