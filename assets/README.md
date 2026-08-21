@@ -194,6 +194,37 @@ mesh inside the hull to 79%, and a 9.7 m fin from 51% to 90%.
 `--spheres=0` gives a prop no colliders at all, which is right for gravel: a
 0.4 m pebble that stops two tonnes is worse than one you drive straight over.
 
+## Replacing the town's placeholder buildings
+
+The town two and a half kilometres south of the spawn is built from procedural
+boxes — `shopMesh`, `blockMesh`, `shedMesh`, `waterTowerMesh` — standing in for
+an authored city pack, the same way `buildCar()` stood in for the Bronco. They
+are authored in metres with the origin at the centre of the base and **+Z
+facing the street**, which is the convention `import-prop.mjs` already uses, so
+an imported facade drops into the same slot with no change to the layout.
+
+To swap one in:
+
+```
+node tools/import-prop.mjs assets/packs/city/Shop_01.fbx --name=shop01 \
+     --tris=420 --height=5.2 --scatter=none --albedo=0.17 --gzip
+```
+
+`--scatter=none` matters: the town places buildings from its own lot list, not
+from the density scatter, so a building must not also be strewn across the
+desert. Then add the entry to `TOWN_MESHES` and its half-extents to
+`TOWN_FOOT`, which is what the collider fit is derived from.
+
+Two things to get right, both learned from the boxes:
+
+- **Albedo, not colour.** `MESH_FS` multiplies a prop's albedo by up to 2.40
+  before ACES, so anything above about 0.2 mean luminance tonemaps to a white
+  cut-out. Pass `--albedo=0.17`; the importer reports what it measured.
+- **Facades want hue separation from the sand.** Pale stucco and this sand are
+  the same colour, and a town in that palette dissolves into the ground it
+  stands on. If the pack is monochrome, `--weather` will break it up; if it is
+  already varied, check the spread `verify-prop.mjs` prints.
+
 ## Licensing
 
 Check the licence of anything you import allows redistribution in a built game

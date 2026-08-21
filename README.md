@@ -181,6 +181,84 @@ a counter rather than random, so a storm is something that happens to the world
 at a time rather than to your session. The wheel-dust emitter runs off the wind
 while it lasts.
 
+**The town** — two and a half kilometres south of the spawn, on the road, the
+desert stops. Everything about it follows from one decision: the town is a
+region of `heightAt`, not geometry standing on the dunes.
+
+Because the height field is the single source of truth for the mesh and the
+physics both, flattening it there buys — with no further code — a level surface
+for the streets, ground the suspension can ride, a cheap tile for the LOD to
+build, and a graded surface for the shader. A mesh city sitting on a dune field
+would have needed a second collision path, a second LOD, and a way to reconcile
+the two. The pad is Chebyshev rather than Euclidean, because a town on a grid
+has a square edge and a round one reads as a crater; its height is the road's
+own grade at that point, so the road delivers you onto Main Street without a
+step. Measured: 0.54 m of relief left across the 360 m core, from 39 m of dune
+before, and 0.5% and 4.1% grades on the two approaches.
+
+The street grid is a field, not geometry, which is what lets it be *the same
+thing the road already is*. `roadness()` returns the greater of the road and
+the grid, and four behaviours that were already written against that one number
+came along for free: the terrain shader stops rippling the streets, the tyres
+find road grip on them, the ruts fade on them, and the scatter keeps off them.
+
+Buildings are placed on frontages down both sides of every street, thinning
+with distance from the main drag — a grid filled uniformly reads as a city
+block from a strategy game, where a desert town is a strip that frays into lots.
+98 lots, deterministic and computed once rather than scattered per cell,
+because a town is a place and a place has to be in the same arrangement every
+time you drive back into it. The transmission line stops at the town boundary:
+a 7.6 m lattice pylon is not what runs down a main street, and breaking the run
+reads as it terminating at a substation out of sight.
+
+They are boxes for now — placeholders for an authored city pack, authored in
+metres with the origin at the base and +Z facing the street, which is the
+convention the prop importer already uses, so the real facades drop into the
+same slots.
+
+Their colours are the one thing that had to be derived rather than chosen.
+`MESH_FS` lights a prop as `vCol * (SUN_COL * 2.40 * sun + amb)`, so a sunlit
+face multiplies its albedo by nearly two and a half before ACES sees it: at
+0.32 every wall in town tonemapped to 0.88 and the place was a row of white
+cut-outs. Halving it barely helped, which was the useful failure — ACES
+compresses so hard up there that 0.32 and 0.24 land 5% apart. The problem was
+never brightness. Pale stucco and this sand are the *same colour*,
+(232,205,170) against (222,205,175), and the town was dissolving into the
+ground it stood on. What fixed it was hue and value separation: four body
+colours instead of two shades of cream, and only the trim allowed anywhere
+near the sand's value.
+
+**Traffic** — fourteen cars going about their business on the grid, and this is
+the oil-drum system with somewhere to be. A drum is already a dynamic body the
+truck's box collides with, knocked by a proper mass ratio and left to settle,
+so a traffic car is that with 1300 kg instead of 55, three spheres instead of
+one, and a direction of travel. They are driven rather than simulated until
+something hits them: steering a full vehicle model for each would cost more
+than the player's truck and look worse, and the moment you touch one it stops
+being driven and becomes a free body, which is the only moment anybody is
+looking closely.
+
+You can flatten them, and getting that right took the one change that was not
+an extension of something. The suspension only ever asks the height field,
+which is exactly why a car in the road was invisible to the wheels — the truck
+shunted it with its bumper and bounced. A monster truck climbs because its
+*tyres* find the roof, so the wheel solve now rides `driveSurface()` instead of
+`heightAt()`, and traffic is the one thing in this world the wheels can see.
+The roof height ramps down across the outer half-metre of the footprint,
+because a hard step is a kerb the wheel teleports onto and the solver answers
+that by firing the truck into the air.
+
+The crush itself was nearly free. The instance format is
+`(x, y, z, scale)` and `(yaw, tint, yScale, tilt)` — a separate vertical scale
+was already there for other reasons — so flattening a car is two numbers rather
+than a second mesh or a per-instance mesh copy. A wheel on the roof crushes it,
+checked once a frame against the contact points the suspension already solved
+rather than as a side effect inside `driveSurface()`, which runs several times
+per wheel per substep and has no business changing the world. A hard shunt
+crumples it too. Impact severity is 0.15 rather than the 1.0 a boulder gets: at
+boulder severity one flattened car cost three quarters of the hull, which made
+the best thing in town a thing you could afford to do twice.
+
 **Tyre tracks** — the truck leaves ruts. A single-channel 2048² accumulation
 map is anchored to the world and covers 320 m (0.156 m per texel, so a 0.48 m
 tyre lands across three texels — one is a scratch, three is a rut with
@@ -533,7 +611,14 @@ moon, which on a map made mostly of ramps is the only cheat worth having.
 
 ## Not done yet
 
-Other vehicles, night, and a real soft-body sand response. Tyre tracks are
+Night, a real soft-body sand response, and authored buildings — the town is
+boxes until the city pack is imported. Building colliders are a 3x2 of spheres
+fitted so their overhang is identically zero, which leaves a gap instead: about
+1.2 m at a corner, 1.6 on the shed. A sphere cannot cover a box corner without
+overhanging its faces, and clipping a corner is the right way round to be wrong
+— better than a wall in the road. The real answer is a box collider, worth
+writing when the authored facades arrive rather than for placeholders. Tyre
+tracks are
 shading only — the ruts do not change `heightAt`, so they have no effect on the
 physics. The `road` is a colour-and-grade corridor rather than a
 decal, so its edges get blocky at long range.

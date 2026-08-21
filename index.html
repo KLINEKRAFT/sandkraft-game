@@ -634,9 +634,56 @@ function roadCenterX(z) {
   return 132 * Math.sin(z * 0.00055) + 58 * Math.sin(z * 0.00017 + 2.1);
 }
 function roadBase(z) { return baseSwell(roadCenterX(z), z) + 0.9; }
-/* 1 on the packed surface, 0 off it */
+/* ------------------------------------------------------------- the town -- */
+/* A place where the desert stops, out on the road two and a half kilometres
+   south of the spawn.
+
+   Everything about it follows from one decision: the town is a region of
+   `heightAt`, not geometry standing on the dunes. Because the height field is
+   the single source of truth for the mesh and the physics both, flattening it
+   here buys — with no further code — a level surface for the streets, ground
+   the suspension can ride, a cheap tile for the LOD to build, and a graded
+   surface for the shader. The alternative, a mesh city sitting on a dune
+   field, would need a second collision path, a second LOD and a way to reconcile
+   the two, and none of that exists here for good reasons.
+
+   The site is on the road so the road delivers you to Main Street rather than
+   past it, and its pad height is the road's own grade at that point, so the
+   two meet without a step. */
+const TOWN = { x: 0, z: -1800, half: 300, edge: 96, block: 78, base: 0 };
+TOWN.x = roadCenterX(TOWN.z);
+TOWN.base = roadBase(TOWN.z);
+
+/* Chebyshev rather than Euclidean distance: a town laid out on a grid has a
+   square edge, and a round pad in a dune field reads as a crater. */
+function townAt(x, z) {
+  const dx = Math.abs(x - TOWN.x), dz = Math.abs(z - TOWN.z);
+  if (dx > TOWN.half || dz > TOWN.half) return 0;      /* the whole world, cheaply */
+  const d = (dx > dz ? dx : dz) - (TOWN.half - TOWN.edge);
+  return d <= 0 ? 1 : 1 - smoothstep(0, TOWN.edge, d);
+}
+
+/* The street grid, as a field rather than as geometry — which is what lets it
+   be the same thing the road already is. */
+const STREET_HALF = 8.5;
+function streetness(x, z) {
+  const t = townAt(x, z);
+  if (t <= 0.02) return 0;
+  const gx = Math.abs(fract((x - TOWN.x) / TOWN.block + 0.5) - 0.5) * TOWN.block;
+  const gz = Math.abs(fract((z - TOWN.z) / TOWN.block + 0.5) - 0.5) * TOWN.block;
+  const d = gx < gz ? gx : gz;
+  return (1 - smoothstep(STREET_HALF, STREET_HALF + 5.0, d)) * smoothstep(0.04, 0.30, t);
+}
+
+/* 1 on the packed surface, 0 off it.
+   A street is a road: folding the grid in here rather than giving it its own
+   field means the terrain shader stops rippling it, the tyres find road grip
+   on it, the ruts fade on it and the scatter keeps off it — four behaviours
+   that were already written against this one number. */
 function roadness(x, z) {
-  return 1 - smoothstep(5.0, 10.5, Math.abs(x - roadCenterX(z)));
+  const r = 1 - smoothstep(5.0, 10.5, Math.abs(x - roadCenterX(z)));
+  const s = streetness(x, z);
+  return s > r ? s : r;
 }
 
 /* full terrain height — the single source of truth for mesh AND physics */
@@ -671,6 +718,9 @@ function heightAt(x, z) {
     const w = smoothstep(46, 13, dr);
     h += (roadBase(z) - h) * (w * 0.93);
   }
+  /* and the town pad, last, so it wins over the corridor inside itself */
+  const tc = townAt(x, z);
+  if (tc > 0) h += (TOWN.base - h) * (tc * 0.985);
   return h;
 }
 /* cheaper field used for baking sun shadows */
@@ -691,6 +741,10 @@ function heightCoarse(x, z) {
         + amp * duneProfile(fract(phase)) + kickAt(x, z, s) * sand;
   const dr = Math.abs(x - roadCenterX(z));
   if (dr < 46) h += (roadBase(z) - h) * (smoothstep(46, 13, dr) * 0.93);
+  /* the pad has to be in the shadow field too, or the town bakes its shadows
+     from the dunes it replaced — the same lesson the mesas taught */
+  const tc = townAt(x, z);
+  if (tc > 0) h += (TOWN.base - h) * (tc * 0.985);
   return h;
 }
 
@@ -1833,6 +1887,100 @@ function hatMesh() {
   return mb;
 }
 
+/* ---- the town, in boxes ----
+   Placeholders for the authored city pack. Enough building to judge the thing
+   that actually needs judging — the block sizes, the street widths, the way it
+   reads at speed — and cheap enough that a hundred of them cost less than one
+   imported plateau. Authored in metres with the origin at the centre of the
+   base and +Z facing the street, which is the convention import-prop.mjs
+   already uses, so the real assets drop into the same slots. */
+/* Derived from the shader rather than picked off a palette, and then twice
+   from the render. MESH_FS lights a prop as `vCol * (SUN_COL * 2.40 * sun +
+   amb)`, so a sunlit face multiplies its albedo by nearly two and a half
+   before ACES ever sees it — albedo 0.32 tonemaps to 0.88 and every wall in
+   town is a white cut-out.
+
+   Halving it barely helped, which was the useful failure: ACES compresses so
+   hard up there that 0.32 and 0.24 land 5% apart. The problem was never
+   brightness. It was that pale stucco and this sand are the *same colour* —
+   (232,205,170) against (222,205,175) — so the town dissolved into the ground
+   it stood on. What fixes it is hue and value separation, which is why the
+   bodies below are a palette of four rather than two shades of cream, and why
+   only the trim is allowed near the sand's value. */
+const CBODY = [
+  [0.200, 0.115, 0.075],    /* adobe, red-brown */
+  [0.235, 0.215, 0.185],    /* whitewashed stucco, the pale one */
+  [0.085, 0.135, 0.135],    /* painted, cool */
+  [0.185, 0.085, 0.065]     /* faded oxide red */
+];
+const CTEAL = [0.10, 0.17, 0.17], CRUST = [0.24, 0.10, 0.08],
+      CGLASS = [0.04, 0.05, 0.06], CROOF = [0.13, 0.12, 0.115],
+      CTRIM = [0.34, 0.325, 0.30];
+const bodyFor = seed => CBODY[Math.floor(hash2(seed * 13 + 5, seed * 7 - 3) * 4) & 3];
+
+/* a single-storey storefront: the parapet is what makes a flat-roofed box
+   read as a shop rather than as a crate */
+function shopMesh(seed) {
+  const mb = new MB();
+  const W = 12.5, D = 9.5, H = 4.4 + hash2(seed, 3) * 0.8;
+  const body = bodyFor(seed);
+  mb.box([0, H / 2, 0], [W, H, D], 0, body);
+  mb.box([0, H + 0.55, 0], [W + 0.5, 1.1, D + 0.5], 0, body);        /* parapet */
+  mb.box([0, H + 1.05, 0], [W + 0.6, 0.16, D + 0.6], 0, CTRIM);      /* coping */
+  mb.box([0, H * 0.78, D / 2 + 0.06], [W * 0.82, 1.0, 0.14], 0,
+         hash2(seed * 3, 5) > 0.5 ? CTEAL : CRUST);                  /* sign band */
+  mb.box([0, H * 0.42, D / 2 + 0.05], [W * 0.74, 1.9, 0.12], 0, CGLASS);
+  mb.box([0, H * 0.60, D / 2 + 0.62], [W * 0.86, 0.11, 1.3], 0, CROOF);   /* awning */
+  return mb;
+}
+/* two and three storeys, with a floor band — the band is the only thing
+   telling you it has floors at all at this triangle count */
+function blockMesh(seed) {
+  const mb = new MB();
+  const W = 11.5, D = 10.5, storeys = hash2(seed, 17) > 0.45 ? 3 : 2;
+  const SH = 3.3, H = storeys * SH;
+  const body = bodyFor(seed + 91);
+  mb.box([0, H / 2, 0], [W, H, D], 0, body);
+  for (let f = 0; f < storeys; f++) {
+    mb.box([0, f * SH + SH * 0.62, D / 2 + 0.05], [W * 0.78, 1.35, 0.12], 0, CGLASS);
+    mb.box([W / 2 + 0.05, f * SH + SH * 0.62, 0], [0.12, 1.35, D * 0.7], 0, CGLASS);
+    if (f) mb.box([0, f * SH, 0], [W + 0.35, 0.22, D + 0.35], 0, CTRIM);
+  }
+  mb.box([0, H + 0.5, 0], [W + 0.45, 1.0, D + 0.45], 0, body);
+  mb.box([0, H + 0.95, 0], [W + 0.55, 0.16, D + 0.55], 0, CTRIM);
+  return mb;
+}
+/* a long shed with a shallow pitch, for the edges of town */
+function shedMesh(seed) {
+  const mb = new MB();
+  const W = 17, D = 11, H = 4.0, R = 1.7;
+  const body = [0.19, 0.18, 0.17];
+  mb.box([0, H / 2, 0], [W, H, D], 0, body);
+  const hw = W / 2, hd = D / 2;
+  const ridgeA = [-hw, H + R, 0], ridgeB = [hw, H + R, 0];
+  mb.quad([-hw, H, hd], [hw, H, hd], ridgeB, ridgeA, CROOF);        /* front pitch */
+  mb.quad(ridgeA, ridgeB, [hw, H, -hd], [-hw, H, -hd], CROOF);      /* back pitch */
+  mb.tri([-hw, H, hd], ridgeA, [-hw, H, -hd], body);                /* gables */
+  mb.tri([hw, H, -hd], ridgeB, [hw, H, hd], body);
+  mb.box([0, H * 0.45, D / 2 + 0.05], [W * 0.30, 3.0, 0.12], 0, CGLASS);   /* roller door */
+  return mb;
+}
+/* one water tower, because a desert town's skyline is a water tower */
+function waterTowerMesh() {
+  const mb = new MB();
+  const steel = [0.20, 0.19, 0.175], tank = [0.25, 0.23, 0.20];
+  const legY = 9.0;
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2 + 0.785;
+    const lx = Math.cos(a) * 3.0, lz = Math.sin(a) * 3.0;
+    mb.limb([lx, 0, lz], [Math.cos(a) * 1.5, legY, Math.sin(a) * 1.5], 0.24, 0.17, 5, steel, steel);
+  }
+  mb.cylY([0, legY - 0.2, 0], 3.2, 0.22, 10, steel, steel);          /* platform */
+  mb.cylY([0, legY + 2.2, 0], 3.0, 2.3, 12, tank, tank);             /* tank */
+  mb.cylY([0, legY + 4.9, 0], 1.5, 0.6, 10, tank, tank);             /* cap */
+  return mb;
+}
+
 /* ---- somebody's backline, abandoned in the sand ----
    A 4x12 cabinet is 0.76 square and 0.36 deep, and a stack is two of them
    under a head. Built to those numbers rather than eyeballed, because the
@@ -1867,7 +2015,9 @@ function monolithMesh() {
 const MESH = {
   rockA: null, rockB: null, pylon: null, wreck: null, car: null, wheel: null,
   drum: null, cactusA: null, cactusB: null, hat: null, joshA: null, joshB: null,
-  amp: null, monolith: null
+  amp: null, monolith: null,
+  shopA: null, shopB: null, blockA: null, blockB: null, shed: null, tower: null,
+  trafficA: null, trafficB: null, trafficC: null
 };
 MESH.rockA = rockMesh(3).uploadInstanced(320);
 MESH.rockB = rockMesh(17).uploadInstanced(320);
@@ -1881,6 +2031,23 @@ MESH.joshA = joshuaMesh(11).uploadInstanced(128);
 MESH.joshB = joshuaMesh(37).uploadInstanced(128);
 MESH.amp = ampMesh().uploadInstanced(12);
 MESH.monolith = monolithMesh().uploadInstanced(2);
+MESH.shopA = shopMesh(3).uploadInstanced(40);
+MESH.shopB = shopMesh(19).uploadInstanced(40);
+MESH.blockA = blockMesh(7).uploadInstanced(32);
+MESH.blockB = blockMesh(29).uploadInstanced(32);
+MESH.shed = shedMesh(11).uploadInstanced(24);
+MESH.tower = waterTowerMesh().uploadInstanced(2);
+const TOWN_MESHES = [MESH.shopA, MESH.shopB, MESH.blockA, MESH.blockB, MESH.shed];
+/* half-extents of each, in the order above, so the colliders can be fitted to
+   the building rather than to a guess — see the note where they are built */
+const TOWN_FOOT = [[6.25, 4.75], [6.25, 4.75], [5.75, 5.25], [5.75, 5.25], [8.5, 5.5]];
+/* declared here rather than with the rest of the traffic state: the mesh caps
+   are set at upload time, which is now, and the fleet size is the cap */
+const TRAFFIC_MAX = 14, TRAFFIC_M = 1300, LANE = 3.1;
+MESH.trafficA = trafficMesh(0).uploadInstanced(TRAFFIC_MAX);
+MESH.trafficB = trafficMesh(1).uploadInstanced(TRAFFIC_MAX);
+MESH.trafficC = trafficMesh(3).uploadInstanced(TRAFFIC_MAX);
+const TRAFFIC_MESHES = [MESH.trafficA, MESH.trafficB, MESH.trafficC];
 
 /* Authored props, if any have been imported. Cap the instance count by mesh
    size so a 4,000-triangle cliff cannot quietly cost more than the terrain.
@@ -2041,7 +2208,7 @@ function updateScatter(px, pz) {
         const h2 = hash2(gx * 29 - k * 3, gz * 11 + k);
         const h3 = hash2(gx * 7 + k * 13, gz * 19 - k);
         const x = ox + h1 * CELL, z = oz + h2 * CELL;
-        if (roadness(x, z) > 0.2) continue;
+        if (roadness(x, z) > 0.2 || townAt(x, z) > 0.10) continue;
         const s = 1.5 + h3 * 4.2;
         normalAt(_scatN, x, z, Math.max(1.5, s));
         if (_scatN.y < 0.965) continue;
@@ -2058,6 +2225,7 @@ function updateScatter(px, pz) {
           const h1 = hash2(gx * 53 + k * 31, gz * 61 + k * 3);
           const h2 = hash2(gx * 43 - k * 7, gz * 71 + k * 19);
           const x = ox + h1 * CELL, z = oz + h2 * CELL;
+          if (townAt(x, z) > 0.10) continue;
           const s = 0.20 + h1 * 0.55;
           push(MESH.rockB, x, heightAt(x, z) - s * 0.22, z, s, h2 * 6.28, 1.0 + h1 * 0.3, s * 0.9);
         }
@@ -2122,6 +2290,230 @@ function groundUnder(x, z, hx, hz, rot) {
   }
 })();
 
+/* ---- lots ----
+   Frontages down both sides of every street, thinning with distance from the
+   main drag. A grid filled uniformly reads as a city block from a strategy
+   game; a desert town is a strip that frays into lots and yards, so the
+   density falls off by street rather than being constant.
+
+   The layout is deterministic and computed once, not scattered per cell like
+   the rocks: a town is a place, and a place has to be in the same arrangement
+   every time you drive back into it. */
+const TOWN_SLOT = 16.0;                      /* frontage slot */
+const TOWN_SETBACK = STREET_HALF + 4.6;      /* kerb to facade */
+const LOTS = (function layOutTown() {
+  const out = [];
+  const N = Math.floor(TOWN.half / TOWN.block);
+  const M = Math.ceil(TOWN.half / TOWN_SLOT);
+  for (let axis = 0; axis < 2; axis++) {
+    for (let li = -N; li <= N; li++) {
+      for (let side = -1; side <= 1; side += 2) {
+        for (let k = -M; k <= M; k++) {
+          const along = (k + 0.5) * TOWN_SLOT;
+          const across = li * TOWN.block + side * TOWN_SETBACK;
+          const x = TOWN.x + (axis === 0 ? across : along);
+          const z = TOWN.z + (axis === 0 ? along : across);
+          if (townAt(x, z) < 0.88) continue;          /* only on the flat core */
+          /* hold the junctions open, or every corner is a blind one */
+          const cross = Math.abs(fract(along / TOWN.block + 0.5) - 0.5) * TOWN.block;
+          if (cross < STREET_HALF + 8) continue;
+          const rank = Math.abs(li);
+          let dens = (li === 0 ? 0.62 : rank === 1 ? 0.32 : 0.13) * (axis ? 0.55 : 1);
+          const h1 = hash2(axis * 977 + li * 31 + k * 7, li * 53 - k * 13 + side * 11);
+          if (h1 > dens) continue;
+          /* +Z faces the street: the instance shader sends +Z to
+             (sin yaw, 0, cos yaw), so facing -side across the street is a
+             quarter turn one way or the other */
+          const yaw = axis === 0 ? -side * Math.PI / 2 : (side > 0 ? Math.PI : 0);
+          const h2 = hash2(k * 41 + li, axis * 13 - side * 7);
+          const h3 = hash2(k * 17 - li * 5, axis * 29 + side);
+          /* the main street gets the two-storey blocks; sheds go to the edges */
+          let mi;
+          if (rank === 0 && axis === 0) mi = h2 > 0.55 ? 2 + (h3 > 0.5 ? 1 : 0) : (h3 > 0.5 ? 1 : 0);
+          else if (rank >= 2) mi = h2 > 0.45 ? 4 : (h3 > 0.5 ? 1 : 0);
+          else mi = h2 > 0.72 ? 2 : (h3 > 0.5 ? 1 : 0);
+          out.push({
+            x, z, yaw, mi,
+            s: 0.88 + h3 * 0.28,
+            ys: 0.9 + h2 * 0.35,
+            tint: 0.80 + h1 * 0.42
+          });
+        }
+      }
+    }
+  }
+  return out;
+})();
+/* the water tower stands on a corner lot, off the main street */
+const TOWER = { x: TOWN.x + TOWN.block * 1.5, z: TOWN.z - TOWN.block * 0.5 };
+
+/* ---- traffic ----
+   Cars going about their business on the grid. This is the oil-drum system
+   with somewhere to be: a drum is already a dynamic body the truck's box
+   collides with, knocked by a proper mass ratio and left to settle, so a
+   traffic car is that with 1300 kg instead of 55, three spheres instead of
+   one, and a direction of travel.
+
+   They are driven rather than simulated until something hits them. Steering a
+   full vehicle model for each one would cost more than the player's truck and
+   look worse; following the grid at a constant speed reads as traffic, and the
+   moment you touch one it stops being driven and becomes a free body, which is
+   the only moment anybody is looking closely. */
+function trafficMesh(seed) {
+  const mb = new MB();
+  const body = [[0.22, 0.075, 0.065], [0.10, 0.13, 0.20], [0.20, 0.19, 0.175],
+                [0.09, 0.15, 0.11], [0.24, 0.20, 0.075]][seed % 5];
+  const glass = [0.05, 0.07, 0.085], tyre = [0.035, 0.035, 0.038],
+        trim = [0.16, 0.16, 0.17], lamp = [0.42, 0.38, 0.26];
+  const L = 4.3, W = 1.78, H = 0.72;
+  mb.box([0, 0.52, 0], [W, H, L], 0, body);                       /* hull */
+  mb.box([0, 0.52 + H / 2 + 0.28, -0.16], [W * 0.88, 0.56, L * 0.46], 0, body);  /* cabin */
+  mb.box([0, 0.52 + H / 2 + 0.30, -0.16], [W * 0.80, 0.34, L * 0.44], 0, glass);
+  mb.box([0, 0.40, L / 2 - 0.04], [W * 0.80, 0.16, 0.10], 0, lamp);   /* lamps */
+  mb.box([0, 0.40, -L / 2 + 0.04], [W * 0.74, 0.13, 0.10], 0, [0.28, 0.06, 0.05]);
+  mb.box([0, 0.30, 0], [W + 0.06, 0.10, L * 0.94], 0, trim);          /* rubbing strip */
+  for (const sx of [-1, 1]) for (const sz of [-1, 1])
+    mb.cylX([sx * (W / 2 - 0.06), 0.33, sz * L * 0.30], 0.33, 0.11, 7, tyre, tyre);
+  return mb;
+}
+
+const traffic = [];
+let trafficSeq = 0;
+/* the grid lines a car is allowed to use — the outer ones run into the ramp */
+const TLINES = Math.max(1, Math.floor((TOWN.half - TOWN.edge) / TOWN.block));
+
+function trafficYaw(axis, dir) {
+  return axis === 0 ? (dir > 0 ? 0 : Math.PI) : (dir > 0 ? Math.PI / 2 : -Math.PI / 2);
+}
+function spawnTraffic() {
+  const n = trafficSeq++;
+  const axis = hash2(n * 17 + 3, 11) > 0.42 ? 0 : 1;      /* the main drag gets more */
+  const line = Math.round((hash2(n * 7, n * 13 + 5) * 2 - 1) * TLINES);
+  const dir = hash2(n * 29, 7) > 0.5 ? 1 : -1;
+  const along = (hash2(n * 3 + 1, n * 19) * 2 - 1) * (TOWN.half - TOWN.edge);
+  const c = { axis, line, dir, along, spd: 7.5 + hash2(n, 23) * 5.5,
+              seed: n, tint: 0.85 + hash2(n * 5, 31) * 0.3,
+              mi: Math.floor(hash2(n * 11 + 7, n * 3) * 3) % 3,
+              vx: 0, vy: 0, vz: 0, free: 0, crush: 0, tilt: 0, tiltAx: 0, rest: 1,
+              x: 0, y: 0, z: 0, yaw: trafficYaw(axis, dir) };
+  placeTraffic(c);
+  c.y = heightAt(c.x, c.z) + 0.02;
+  traffic.push(c);
+}
+function placeTraffic(c) {
+  const across = c.line * TOWN.block + c.dir * LANE * (c.axis === 0 ? 1 : -1);
+  c.x = TOWN.x + (c.axis === 0 ? across : c.along);
+  c.z = TOWN.z + (c.axis === 0 ? c.along : across);
+}
+
+function updateTraffic(dt) {
+  const near = Math.abs(car.p.x - TOWN.x) < TOWN.half + 500 &&
+               Math.abs(car.p.z - TOWN.z) < TOWN.half + 500;
+  if (!near) {
+    if (traffic.length) traffic.length = 0;
+    for (const m of TRAFFIC_MESHES) { m.inst = 0; m.flush(); }
+    return;
+  }
+  while (traffic.length < TRAFFIC_MAX) spawnTraffic();
+
+  const lim = TOWN.half - TOWN.edge;
+  for (const c of traffic) {
+    if (c.free) {
+      /* knocked loose: ballistic, then settles. Same shape as a drum, heavier. */
+      c.vy -= 9.81 * dt;
+      c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
+      const g = heightAt(c.x, c.z);
+      if (c.y <= g + 0.02) {
+        c.y = g + 0.02;
+        if (c.vy < -1) { c.vy *= -0.22; } else c.vy = 0;
+        const k = Math.exp(-3.4 * dt);
+        c.vx *= k; c.vz *= k;
+        if (Math.hypot(c.vx, c.vz) < 0.5) { c.vx = 0; c.vz = 0; }
+      }
+      c.tilt += (0 - c.tilt) * Math.min(1, dt * 0.7);
+      continue;
+    }
+    /* driven: advance along the lane, and decide again at each junction */
+    const prev = c.along;
+    c.along += c.spd * c.dir * dt;
+    const j0 = Math.floor(prev / TOWN.block + 0.5), j1 = Math.floor(c.along / TOWN.block + 0.5);
+    if (j0 !== j1) {
+      const h = hash2(c.seed * 31 + j1, c.line * 17 + c.axis);
+      if (h > 0.62) {                                  /* turn at the junction */
+        const newLine = j1;
+        const newAxis = 1 - c.axis;
+        if (Math.abs(newLine) <= TLINES) {
+          c.along = c.line * TOWN.block;
+          c.line = newLine;
+          c.axis = newAxis;
+          c.dir = hash2(c.seed * 13, j1 * 7) > 0.5 ? 1 : -1;
+          c.yaw = trafficYaw(c.axis, c.dir);
+        }
+      }
+    }
+    if (c.along > lim || c.along < -lim) {             /* turn back at the edge */
+      c.along = clamp(c.along, -lim, lim);
+      c.dir = -c.dir;
+      c.yaw = trafficYaw(c.axis, c.dir);
+    }
+    placeTraffic(c);
+    c.y = heightAt(c.x, c.z) + 0.02;
+  }
+
+  /* A wheel on the roof is what actually flattens one. Checked here, once a
+     frame against the contact points the suspension already solved, rather
+     than as a side effect inside driveSurface — that runs several times per
+     wheel per substep and has no business changing the world. */
+  for (const c of traffic) {
+    if (c.crush >= 1) continue;
+    const fy = Math.sin(c.yaw), fz = Math.cos(c.yaw);
+    let on = 0;
+    for (const wl of car.wheels) {
+      if (!wl.contact) continue;
+      const dx = wl.cx - c.x, dz = wl.cz - c.z;
+      if (dx * dx + dz * dz > 9) continue;
+      if (Math.abs(dx * fy + dz * fz) > 2.15 || Math.abs(dx * fz - dz * fy) > 0.95) continue;
+      on++;
+    }
+    if (!on) continue;
+    const before = c.crush;
+    c.crush = Math.min(1, c.crush + on * 0.62 * dt);
+    c.free = 1;
+    if (before < 0.30 && c.crush >= 0.30) {
+      crashSound(0.55, 'metal');
+      for (let n = 0; n < 12; n++) {
+        const jt = () => (Math.random() - 0.5) * 2;
+        spawnDust(c.x + jt() * 1.7, c.y + 0.4, c.z + jt() * 1.7,
+          jt() * 3.2, 1.2 + Math.random() * 2, jt() * 3.2, 0.7 + Math.random(), 22 + Math.random() * 28);
+      }
+    }
+  }
+
+  /* clear away settled wreckage the player has driven away from, so the town
+     does not silently turn into a scrapyard over a long session */
+  for (let i = traffic.length - 1; i >= 0; i--) {
+    const c = traffic[i];
+    if (c.free && c.vx === 0 && c.vz === 0 &&
+        Math.hypot(c.x - car.p.x, c.z - car.p.z) > 260) traffic.splice(i, 1);
+  }
+
+  for (const m of TRAFFIC_MESHES) m.inst = 0;
+  for (const c of traffic) {
+    const m = TRAFFIC_MESHES[c.mi];
+    if (m.inst >= m.max) continue;
+    if (Math.hypot(c.x - cam.p.x, c.z - cam.p.z) > 620) continue;
+    const o = m.inst * 8;
+    /* the crush: iRT.z is a per-instance vertical scale and iPS.w a horizontal
+       one, so flattening a car is two numbers rather than a second mesh */
+    m.data[o] = c.x; m.data[o + 1] = c.y; m.data[o + 2] = c.z;
+    m.data[o + 3] = 1 + c.crush * 0.20;
+    m.data[o + 4] = c.yaw; m.data[o + 5] = c.tint;
+    m.data[o + 6] = 1 - c.crush * 0.74; m.data[o + 7] = c.tilt;
+    m.inst++;
+  }
+  for (const m of TRAFFIC_MESHES) m.flush();
+}
+
 const drums = [];                        /* dynamic, knockable */
 const DRUM_R = 0.46, DRUM_M = 55;
 function spawnDrum(x, z, id) {
@@ -2142,7 +2534,8 @@ function updateProps(px, pz) {
   colliders.length = 0;
   MESH.cactusA.inst = 0; MESH.cactusB.inst = 0; MESH.hat.inst = 0;
   MESH.joshA.inst = 0; MESH.joshB.inst = 0;
-  MESH.amp.inst = 0; MESH.monolith.inst = 0;
+  MESH.amp.inst = 0; MESH.monolith.inst = 0; MESH.tower.inst = 0;
+  for (const m of TOWN_MESHES) m.inst = 0;
   for (const ip of importedProps) if (ip.mesh) ip.mesh.inst = 0;
   const seen = new Set();
 
@@ -2166,7 +2559,7 @@ function updateProps(px, pz) {
         const h1 = hash2(gx * 31 + k * 3, gz * 37 + k);
         const h2 = hash2(gx * 41 - k, gz * 43 + k * 7);
         const x = ox + h1 * CELL, z = oz + h2 * CELL;
-        if (roadness(x, z) > 0.15) continue;
+        if (roadness(x, z) > 0.15 || townAt(x, z) > 0.10) continue;
         normalAt(_pn, x, z, 3);
         if (_pn.y < 0.985) continue;                 /* they grow on flat ground */
         const id = 'c' + gx + ',' + gz + ',' + k;
@@ -2192,7 +2585,7 @@ function updateProps(px, pz) {
            of the prop radius is worth — a 314-triangle tree at 500 m is a
            smudge, so they only exist inside a tighter disc */
         if (Math.hypot(x - px, z - pz) > 340) continue;
-        if (roadness(x, z) > 0.15) continue;
+        if (roadness(x, z) > 0.15 || townAt(x, z) > 0.10) continue;
         if (rockAt(x, z) > 0.80) continue;           /* not on bare cap or cliff */
         normalAt(_pn, x, z, 3);
         if (_pn.y < 0.930) continue;                 /* nothing grows on a slip face */
@@ -2230,6 +2623,7 @@ function updateProps(px, pz) {
           const h2 = hash2(gx * (131 + pi) - k * 5, gz * (137 + pi) + k * 3);
           const x = ox + h1 * CELL, z = oz + h2 * CELL;
           if (Math.abs(x - roadCenterX(z)) < (d.roadClear || 0)) continue;
+          if (townAt(x, z) > 0.08) continue;         /* the town is not scatter */
           const sc = d.scale[0] + hash2(gx + k * 13, gz - k * 5) * (d.scale[1] - d.scale[0]);
           /* Judge the ground across the prop's own footprint, not at a fixed
              3 m. A 50 m plateau sited off a 3 m sample sits on what is locally
@@ -2261,7 +2655,7 @@ function updateProps(px, pz) {
           const h1 = hash2(gx * 61 + k * 13, gz * 67 + k);
           const h2 = hash2(gx * 71 - k * 5, gz * 73 + k * 3);
           const x = ox + h1 * CELL, z = oz + h2 * CELL;
-          if (roadness(x, z) > 0.6) continue;
+          if (roadness(x, z) > 0.6 || townAt(x, z) > 0.10) continue;
           const id = gx * 100003 + gz * 397 + k;
           seen.add(id);
           if (!drums.some(d => d.id === id)) spawnDrum(x, z, id);
@@ -2293,6 +2687,59 @@ function updateProps(px, pz) {
     post(-7.5, 6.0, 1.4, 0.8);                  /* crates */
     post(-6.2, 8.2, 1.2, 0.7);
     post(6.5, -6.5, 3.2, 0.55);                 /* stub tower */
+  }
+
+  /* ---- the town ----
+     The lots are a fixed list rather than a per-cell scatter, so this walks
+     the whole list and uploads what is near enough to see. A hundred entries
+     is nothing next to the per-cell hashing the rocks do; what costs is the
+     colliders, so those stop at a much shorter range than the drawing does. */
+  if (Math.abs(px - TOWN.x) < TOWN.half + 700 && Math.abs(pz - TOWN.z) < TOWN.half + 700) {
+    for (const L of LOTS) {
+      const dx = L.x - px, dz = L.z - pz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > 760 * 760) continue;
+      const m = TOWN_MESHES[L.mi];
+      const y = groundUnder(L.x, L.z, 7, 6, L.yaw) - 0.15;
+      pushInst(m, L.x, y, L.z, L.s, L.yaw, L.tint, L.ys);
+      /* A building is a box and the solver only speaks spheres, so the
+         footprint gets a 3x2 of them — fitted to the mesh's real half-extents
+         rather than to one guess for all five types.
+
+         Radius and centres are chosen together so the hull's extent is exactly
+         the building's: r = min(hw/2.2, hd*0.84) with the centres pulled in by
+         r from each face, which makes the overhang identically zero whatever
+         the footprint. Sized by eye instead, at r=4.2 on centres of 5.2, the
+         hull reached three metres past the facade and every shopfront had an
+         invisible wall standing in the street in front of it.
+
+         What is left is a gap, not an overhang, and it is at the corners: a
+         sphere cannot cover a box corner without overhanging its faces, so the
+         union falls about 1.2 m short there (1.6 on the shed) and roughly half
+         a metre at the middle of a long edge. Clipping a corner is the right
+         way round to be wrong — better than a wall in the road — and the real
+         fix is a box collider, which is worth writing when the authored
+         facades arrive rather than for placeholders. */
+      if (d2 > 150 * 150) continue;
+      const c = Math.cos(L.yaw), sn = Math.sin(L.yaw);
+      const F = TOWN_FOOT[L.mi];
+      const hw = F[0] * L.s, hd = F[1] * L.s;
+      const r = Math.min(hw / 2.2, hd * 0.84);
+      for (const lx of [-(hw - r), 0, hw - r])
+        for (const lz of [-(hd - r), hd - r])
+          colliders.push({ x: L.x + lx * c + lz * sn, y: y + 1.4,
+                           z: L.z - lx * sn + lz * c, r, kind: HARD, mat: 'rock' });
+    }
+    const ty = groundUnder(TOWER.x, TOWER.z, 3.4, 3.4, 0) - 0.1;
+    if (Math.hypot(TOWER.x - px, TOWER.z - pz) < 900) {
+      pushInst(MESH.tower, TOWER.x, ty, TOWER.z, 1, 0.4, 1, 1);
+      if (Math.hypot(TOWER.x - px, TOWER.z - pz) < 150)
+        for (let i = 0; i < 4; i++) {
+          const a = i * Math.PI / 2 + 0.785 + 0.4;
+          colliders.push({ x: TOWER.x + Math.cos(a) * 2.4, y: ty + 1.4,
+                           z: TOWER.z + Math.sin(a) * 2.4, r: 0.7, kind: HARD, mat: 'metal' });
+        }
+    }
   }
 
   /* hand-placed props */
@@ -2342,7 +2789,8 @@ function updateProps(px, pz) {
 
   MESH.cactusA.flush(); MESH.cactusB.flush(); MESH.hat.flush();
   MESH.joshA.flush(); MESH.joshB.flush();
-  MESH.amp.flush(); MESH.monolith.flush();
+  MESH.amp.flush(); MESH.monolith.flush(); MESH.tower.flush();
+  for (const m of TOWN_MESHES) m.flush();
   for (const ip of importedProps) if (ip.mesh) ip.mesh.flush();
 }
 
@@ -2471,6 +2919,66 @@ function collideProps(dt) {
     vaddScaled(car.p, car.p, _cn, Math.max(0, pen - 0.02) * 0.12);
     d.x -= _cn.x * pen * 0.6; d.z -= _cn.z * pen * 0.6;
   }
+  /* traffic: 1300 kg against 2100, three spheres down the length, and the one
+     thing a drum cannot do — go flat. The normal the solver hands back points
+     from the obstacle towards the truck, so its Y component is the test for
+     whether you have hit this car or climbed onto it. */
+  for (const c of traffic) {
+    if (Math.abs(c.x - car.p.x) > 10 || Math.abs(c.z - car.p.z) > 10) continue;
+    const fy = Math.sin(c.yaw), fz = Math.cos(c.yaw);
+    const squash = 1 - c.crush * 0.74;
+    for (let k = -1; k <= 1; k++) {
+      const off = k * 1.32;
+      const sx = c.x + fy * off, sz = c.z + fz * off;
+      const sy = c.y + 0.60 * squash;
+      const r = 0.92 * (k ? 0.92 : 1);
+      const dist = carClosest(sx, sy, sz);
+      const pen = r - dist;
+      if (pen <= 0) continue;
+      vscale(_cn, _cn, -1);
+      vsub(_cr, _hitP, car.p);
+      vcross(_cv, car.w, _cr);
+      vadd(_cv, car.v, _cv);
+      _cv.x -= c.vx; _cv.y -= c.vy; _cv.z -= c.vz;
+      const vn = vdot(_cv, _cn);
+      const onTop = _cn.y > 0.55;
+      if (onTop && c.crush < 1) {
+        /* Driving over it rather than into it. Crushing on contact time
+           instead of on impulse is what lets you park on one and squash it
+           slowly, as well as flatten it at speed. */
+        const before = c.crush;
+        c.crush = Math.min(1, c.crush + (0.42 + Math.max(0, -vn) * 0.10) * dt * 5.5);
+        c.free = 1;
+        if (before < 0.30 && c.crush >= 0.30) {
+          registerHit(_hitP, _cn, 4.5, 0.06, 'metal');
+          for (let n = 0; n < 10; n++) {
+            const jt = () => (Math.random() - 0.5) * 2;
+            spawnDust(c.x + jt() * 1.6, c.y + 0.4, c.z + jt() * 1.6,
+              jt() * 3, 1.2 + Math.random() * 1.8, jt() * 3, 0.7 + Math.random(), 20 + Math.random() * 26);
+          }
+        }
+      }
+      if (vn < 0) {
+        const j = applyImpact(_hitP, _cn, vn, 0.22, 1 / TRAFFIC_M);
+        c.vx -= _cn.x * j / TRAFFIC_M;
+        c.vy -= _cn.y * j / TRAFFIC_M - (onTop ? 0 : 0.9);
+        c.vz -= _cn.z * j / TRAFFIC_M;
+        if (!onTop) { c.tiltAx = Math.atan2(_cn.x, _cn.z); c.tilt = Math.min(0.5, c.tilt + Math.min(0.35, -vn * 0.02)); }
+        c.free = 1;
+        /* 0.15, not the 1.0 a boulder gets: a sedan is a third of the truck's
+           mass and folds. At boulder severity one flattened car cost three
+           quarters of the hull, which made the best thing in town a thing you
+           could only afford to do twice. */
+        if (-vn > 2.5) registerHit(_hitP, _cn, -vn, 0.15, 'metal');
+        /* and it crumples: two tonnes into a sedan does not leave it straight */
+        if (-vn > 4) c.crush = Math.min(1, c.crush + Math.min(0.42, (-vn - 4) * 0.035));
+      }
+      /* riding up over a flattening car should not shove the truck aside */
+      vaddScaled(car.p, car.p, _cn, Math.max(0, pen - 0.02) * (onTop ? 0.55 : 0.30));
+      if (!onTop) { c.x -= _cn.x * pen * 0.35; c.z -= _cn.z * pen * 0.35; }
+    }
+  }
+
   if (sp > 2) crash.shake = Math.max(0, crash.shake - dt * 2.2);
   else crash.shake = Math.max(0, crash.shake - dt * 4);
 }
@@ -2602,6 +3110,12 @@ function updatePylons(px, pz) {
     const z = idx * PYLON_SPACING;
     const x = roadCenterX(z) + PYLON_OFF;
     const y = heightAt(x, z);
+    /* The line stops at the edge of town. A 7.6 m lattice transmission pylon
+       is not what runs down a main street, and breaking the run at the town
+       boundary reads as the line terminating at a substation somewhere out of
+       sight — which is what actually happens. Dropping `prev` breaks the
+       cable too, so there is no kilometre-long span across the rooftops. */
+    if (townAt(x, z) > 0.45) { prev = null; continue; }
     const lean = (hash2(idx, 7) - 0.5) * 0.28;
     if (MESH.pylon.inst < MESH.pylon.max) {
       const o = MESH.pylon.inst * 8;
@@ -2736,6 +3250,32 @@ const _mount = v3(), _r = v3(), _rc = v3(), _down = v3(), _pv = v3(), _tmp = v3(
 const _fw = v3(), _side = v3(), _ng = v3(), _F = v3(), _T = v3(), _acc = v3(), _rr = v3();
 const ROLL_CENTRE = -0.42;
 
+/* The suspension only ever asks the height field, which is exactly why a car
+   sitting in the road was invisible to the wheels: you shunted it with the
+   bumper instead of climbing it. Traffic is the one thing in this world the
+   wheels have to see, because driving over it is the whole point — a monster
+   truck climbs because its tyres find the roof, not because its nose does.
+
+   The roof height ramps down across the outer half-metre of the footprint.
+   A hard step would be a kerb the wheel teleports onto and the truck would be
+   fired into the air by the solver; a ramp is something it drives up. */
+function driveSurface(x, z) {
+  const g = heightAt(x, z);
+  for (let i = 0; i < traffic.length; i++) {
+    const c = traffic[i];
+    const dx = x - c.x, dz = z - c.z;
+    if (dx * dx + dz * dz > 9) continue;                 /* 3 m reject, cheap */
+    const fy = Math.sin(c.yaw), fz = Math.cos(c.yaw);
+    const along = Math.abs(dx * fy + dz * fz), across = Math.abs(dx * fz - dz * fy);
+    if (along > 2.15 || across > 0.95) continue;
+    const e = Math.min((2.15 - along) / 0.55, (0.95 - across) / 0.40, 1);
+    if (e <= 0) continue;
+    const top = c.y + 1.24 * (1 - c.crush * 0.74) * e;
+    if (top > g) return top;
+  }
+  return g;
+}
+
 function carStep(dt) {
   qrot(car.up, car.q, UP);
   qrot(car.fwd, car.q, FWD);
@@ -2773,7 +3313,7 @@ function carStep(dt) {
     let t = Math.max(0, _mount.y - heightAt(_mount.x, _mount.z)) / Math.max(0.25, -_down.y);
     for (let it = 0; it < 3; it++) {
       const hx = _mount.x + _down.x * t, hy = _mount.y + _down.y * t, hz = _mount.z + _down.z * t;
-      const g = hy - heightAt(hx, hz);
+      const g = hy - driveSurface(hx, hz);
       t += g / Math.max(0.25, -_down.y);
       if (Math.abs(g) < 0.01) break;
     }
@@ -4522,6 +5062,9 @@ function render() {
   drawInstanced(MESH.drum);
   drawInstanced(MESH.amp);
   drawInstanced(MESH.monolith);
+  for (const m of TOWN_MESHES) drawInstanced(m);
+  drawInstanced(MESH.tower);
+  for (const m of TRAFFIC_MESHES) drawInstanced(m);
   if (CHAR && coverBlend > 0.02) {
     drawCharacter(cover.charX, cover.charY, cover.charZ, cover.charYaw, 1, vpM);
     gl.useProgram(P.mesh.p);           /* the skin program is not what follows */
@@ -4714,6 +5257,7 @@ function frame(now) {
   updateScatter(cam.p.x, cam.p.z);
   updateProps(car.p.x, car.p.z);
   updateDrums(dt);
+  updateTraffic(dt);
   updatePylons(car.p.x, car.p.z);
   updateShadow();
   const calls = render();
