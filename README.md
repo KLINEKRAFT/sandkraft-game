@@ -69,6 +69,31 @@ warm exponential haze whose colour is sampled from the same sky function the
 sky itself uses, so the horizon dissolves cleanly. ACES tonemap, dithered.
 Everything is procedural — there are no textures in the file.
 
+**Tyre tracks** — the truck leaves ruts. A single-channel 2048² accumulation
+map is anchored to the world and covers 320 m (0.156 m per texel, so a 0.48 m
+tyre lands across three texels — one is a scratch, three is a rut with
+shoulders). Each wheel in contact stamps a quad into it, blended with `MAX`
+rather than additively: consecutive segments overlap at their end caps by
+design, and summing there beads the rut into a chain of bright lumps. `MAX` also
+keeps the stored number an actual rut depth instead of an accumulator that
+saturates after three passes. Depth comes from wheel load against the static
+quarter weight and from slip, so a wheel going light over a crest barely marks,
+a hard landing gouges, and a locked slide smears.
+
+Stamping runs per physics step, not per frame — at 20 fps a frame moves a wheel
+2 m, and sampling contact once across that drops whole stretches. Drive out of
+range and the map re-anchors: the old contents are blitted back at the new
+offset (texel-aligned, so it is an exact copy) and dimmed slightly, which is how
+the wind takes the ruts back. A timer forces that dimming pass every few seconds
+too, or doughnuts cut in one spot would never re-anchor and so would be
+permanent.
+
+The terrain shader reads it and does four things: flattens the wind ripples,
+darkens and cools the compacted sand, stops it glittering, and bends the normal
+towards the rut's centre line off a central difference. The height field is not
+touched, so a rut is shading, not geometry — you cannot get stuck in your own
+tracks.
+
 **Landmarks** — seeded rock scatter (rejected on slopes too steep to sit on), a
 pylon line with sagging wire running beside the road, and three half-buried
 wrecks placed on the flattest ground near their seed points. Without them an
@@ -183,6 +208,7 @@ Two, both at fixed coordinates, both findable by driving:
 
 ## Not done yet
 
-Terrain deformation from the tyres, other vehicles, weather, and a real
-soft-body sand response. The `road` is a colour-and-grade corridor rather than a
+Other vehicles, weather, and a real soft-body sand response. Tyre tracks are
+shading only — the ruts do not change `heightAt`, so they have no effect on the
+physics. The `road` is a colour-and-grade corridor rather than a
 decal, so its edges get blocky at long range.
