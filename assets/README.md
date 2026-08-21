@@ -194,47 +194,73 @@ mesh inside the hull to 79%, and a 9.7 m fin from 51% to 90%.
 `--spheres=0` gives a prop no colliders at all, which is right for gravel: a
 0.4 m pebble that stops two tonnes is worse than one you drive straight over.
 
-## Replacing the town's placeholder buildings
+## The town's buildings and its traffic
 
-The town two and a half kilometres south of the spawn is built from procedural
-boxes — `shopMesh`, `blockMesh`, `shedMesh`, `waterTowerMesh` — standing in for
-an authored city pack, the same way `buildCar()` stood in for the Bronco. They
-are authored in metres with the origin at the centre of the base and **+Z
-facing the street**, which is the convention `import-prop.mjs` already uses, so
-an imported facade drops into the same slot with no change to the layout.
+Both are imported; `tools/import-city-packs.sh` carries every argument. The
+procedural boxes they replaced are still in `index.html` as the fallback, the
+same way `buildCar()`'s boxes are still the fallback for the Bronco.
 
-To swap one in:
+**Crayon City Architecture** is the easiest pack this importer has met: GLB,
+metres, Y-up, ground-centred pivot — the convention `import-prop.mjs` already
+wants, so nothing needs reorienting or rescaling. Its licence also permits
+redistributing the source assets free of charge, so unlike the CraftPix rocks
+this one *could* be committed; `assets/packs/` stays ignored only to keep the
+checkout small.
 
-```
-node tools/import-prop.mjs assets/packs/city/Shop_01.fbx --name=shop01 \
-     --tris=420 --height=5.2 --scatter=none --albedo=0.17 --gzip
-```
+Two things about it are worth knowing before importing any modern pack:
 
-`--scatter=none` matters: the town places buildings from its own lot list, not
-from the density scatter, so a building must not also be strewn across the
-desert. Then add the entry to `TOWN_MESHES` and its half-extents to
-`TOWN_FOOT`, which is what the collider fit is derived from.
+- **It ships a baked collision hull.** Every model has 27–36 invisible box
+  proxies under a `Colliders` group. Imported as geometry that is a second,
+  blockier building standing inside the first, and because the proxy material
+  is transparent in the DCC tool and opaque here, it renders. `import-prop.mjs`
+  now recognises the common naming conventions — `Collider`, `Collision`,
+  `UCX_`, `UBX_`, `USP_` — drops them, and says so; `--exclude=RE` overrides.
+  It also warns if anything that looks like a proxy survives.
+- **Do not decimate it.** These are 740–892 triangles already, and their detail
+  is thin horizontal slabs: floor plates, curtain-wall mullions, eaves. Vertex
+  clustering tears exactly that — at 440 the tower came back gashed open and
+  the office had a diagonal cut through three floors. `--tris=900` is above
+  every model in the pack, which is the way to say "leave it alone". Two
+  kilobytes each, gzipped, to not wreck them.
 
-Two things to get right, both learned from the boxes:
+The cars are FBX with a palette atlas at `Fbx/Texture/Color.png`, which
+`parse-fbx.mjs` finds and samples through the UVs. They decimate well — solid
+volumes rather than thin plates — so 2,500–3,600 triangles come down to about
+330 without visible damage.
 
-- **Albedo, not colour.** `MESH_FS` multiplies a prop's albedo by up to 2.40
-  before ACES, so anything above about 0.2 mean luminance tonemaps to a white
-  cut-out. Pass `--albedo=0.17`; the importer reports what it measured.
-- **Facades want hue separation from the sand.** Pale stucco and this sand are
-  the same colour, and a town in that palette dissolves into the ground it
-  stands on. If the pack is monochrome, `--weather` will break it up; if it is
-  already varied, check the spread `verify-prop.mjs` prints.
+Both go in with `--scatter=none`, which is what marks an import as placed by
+hand: the town's lot list and the traffic system place them, `updateProps`
+skips them, and the imported-prop draw skips them too, because whoever places a
+thing owns drawing it. `--spheres=0` for the same reason — the town fits
+colliders from the footprint and traffic carries its own, so packed ones would
+be dead weight. `--weather=0` because weathering exists for a rock pack that
+shipped one flat colour, and these arrive with a dozen or more of their own.
+
+Every import records its extents as `dim` in the payload. That is what the town
+fits its colliders to and what the traffic collision reads its half-extents
+from, so swapping a body for a longer one needs no table kept in sync by hand.
 
 ## Licensing
 
 Check the licence of anything you import allows redistribution in a built game
 before committing it to this repo — and note that shipping the *source pack* in
-a public repo is a different act from shipping a game that uses it. The two
-CraftPix desert packs are used here under their file licence, which permits use
-in a game and not redistribution of the assets, so `assets/packs/` is gitignored
-and only the derived, decimated, weathered geometry lives in `index.html`.
-`tools/import-desert-packs.sh` documents the layout to drop them into and every
-number the import was run with.
+a public repo is a different act from shipping a game that uses it.
+
+`assets/packs/` is gitignored and only the derived geometry lives in
+`index.html`. The three packs differ, and the difference is worth keeping
+straight:
+
+- **CraftPix desert stone / mountain** — the file licence permits use in a game
+  and not redistribution of the assets. Derived geometry only.
+- **Crayon City Architecture** — its licence explicitly permits redistributing
+  the source assets, modified or unmodified, provided they stay free of charge.
+  This one could be committed; it is left out only to keep the checkout small.
+- **The car pack** — arrived with no licence file at all, which is not the same
+  as permissive. Derived geometry only, and worth chasing the original terms
+  before shipping anything publicly.
+
+`tools/import-desert-packs.sh` and `tools/import-city-packs.sh` document the
+layout to drop each into and every number the imports were run with.
 
 ## Rigged characters
 

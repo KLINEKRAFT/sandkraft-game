@@ -24,6 +24,8 @@
                         cells span the prop's long axis
      --sink=0.03        bed this fraction of the prop's height into the ground
      --texture=PATH     bake this image instead of the one the file names
+     --exclude=RE       drop parts whose name matches; without it, parts that
+                        look like baked collision proxies are dropped anyway
      --gzip             deflate the blob; the engine inflates it at boot
      --remove           delete this entry and write nothing else
      --dry              report the fit, write nothing
@@ -94,6 +96,29 @@ if (!['rock', 'sand', 'both', 'none'].includes(SCATTER)) throw new Error('--scat
 /* ---------------------------------------------------------------- load -- */
 const model = parseModel(file, { texture: opt('texture', null) });
 if (!model.parts.length) throw new Error('no triangles found in ' + file);
+
+/* Packs increasingly ship a baked collision hull alongside the visual mesh —
+   an invisible box proxy per feature, under a group called Colliders, UCX_, or
+   similar. Imported as geometry it is a second, blockier building standing
+   inside the first, and because the proxy material is transparent in the DCC
+   tool and opaque here, it renders. Nothing about that fails loudly, so the
+   commonest names are recognised and reported whether or not you asked. */
+const PROXY = /collider|collision|crayon-collider|^UCX_|_UCX|\bUBX_|\bUSP_/i;
+const EX = opt('exclude', null);
+{
+  const rx = EX ? new RegExp(EX, 'i') : null;
+  const drop = model.parts.filter(p => (rx && rx.test(p.name)) || (!rx && PROXY.test(p.name)));
+  if (drop.length) {
+    const n = drop.reduce((a, p) => a + p.tris.length, 0);
+    model.parts = model.parts.filter(p => !drop.includes(p));
+    log(`  exclude  ${drop.length} part(s), ${n} triangles: ${rx ? 'matched --exclude' : 'look like collision proxies'}` +
+        ` (e.g. ${drop[0].name})`);
+  }
+  const left = model.parts.filter(p => PROXY.test(p.name));
+  if (left.length) log(`  exclude  *** ${left.length} part(s) still look like collision proxies — check --exclude ***`);
+  if (!model.parts.length) throw new Error('every part was excluded from ' + file);
+}
+
 let tris = model.parts.flatMap(p => p.tris);
 log(`${file}: ${model.parts.length} part(s), ${tris.length} triangles`);
 
@@ -366,6 +391,10 @@ const entry = {
   scale: [SCALE[0], SCALE[1] ?? SCALE[0]],
   roadClear: CLEAR,
   height: +hi[1].toFixed(2),
+  /* full extents, so anything placing this by hand — the town's lot list, the
+     traffic system — can fit its colliders and its footprint tests to the mesh
+     that actually arrived rather than to a table kept in sync by hand */
+  dim: [+(hi[0] - lo[0]).toFixed(2), +hi[1].toFixed(2), +(hi[2] - lo[2]).toFixed(2)],
   /* the world needs the footprint to judge the ground under a wide prop, and
      how far to bed it in so its base does not stand proud on a slope */
   foot: +(Math.max(hi[0] - lo[0], hi[2] - lo[2]) / 2).toFixed(2),
