@@ -17,6 +17,7 @@ every load and on every device.
 | Handbrake | HAND pad (landscape only) |
 | Tilt steering | TILT — asks for motion permission on iOS, then steer by tilting |
 | Camera | CAM cycles chase → cockpit → wide |
+| Finding the town | the HUD reads `TOWN -54,-1800 · 2.8KM · 176°` — drive south from the spawn and follow the road |
 | Radio | RADIO cycles the stations: ROAM → THRASH → AM → OFF |
 
 **Keyboard**
@@ -234,6 +235,25 @@ the useful failure — ACES compresses so hard up there that 0.32 and 0.24 land
 *same colour*, (232,205,170) against (222,205,175), and the town was dissolving
 into the ground it stood on. Everything now normalises to 0.18, and the packs'
 own dozen-odd material colours do the separating.
+
+**Finding it** — the town is 2.76 km south of the spawn, on the road, and the
+first two attempts to put it there both failed in ways that only show up when
+somebody goes looking.
+
+The HUD's bearing readout ranked destinations by distance, which meant it
+pointed at the nearest wreck — 284 m from the spawn — and never once mentioned
+the biggest thing in the world. Somebody who cannot find the town does not want
+to know about a wreck, so the town is now the standing destination rather than a
+contestant, with its coordinates on the pad and the telemetry carrying your own.
+
+And the buildings only drew inside 760 m, with the town itself gated at a
+kilometre. Driving south you would not see it until z ≈ −800, which is to say
+the way you discovered a town was by nearly hitting it. They draw from 2.3 km
+now — but only the tall ones past 1.25 km. Everything from 2.3 km tripled the
+frame cost to render 107 buildings averaging two pixels tall; the skyline is the
+part that does the work at that range, which is the same trade the Joshua trees
+already make inside their 340 m disc. 28 buildings and 24k triangles at 2 km
+against 107 and 91k, for the same silhouette.
 
 **Traffic** — fourteen cars going about their business on the grid — sedan,
 hatchback, SUV, pickup and van — and this is

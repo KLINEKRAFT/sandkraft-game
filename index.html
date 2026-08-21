@@ -228,7 +228,8 @@ body.title3d #scrim{background:linear-gradient(180deg,
   <div class="pad" id="tele">
     ALT <span id="t-alt">0</span> M &nbsp; GRADE <span id="t-grade">0</span>%<br>
     SURF <span id="t-surf">SAND</span> &nbsp; DIST <span id="t-dist">0.0</span> KM<br>
-    HULL <span id="t-dmg">100</span>% &nbsp; HITS <span id="t-hits">0</span>
+    HULL <span id="t-dmg">100</span>% &nbsp; HITS <span id="t-hits">0</span><br>
+    POS <span id="t-pos">0, 0</span>
   </div>
   <div class="pad" id="dmgbar"><span id="d-fill"></span></div>
   <div class="pad" id="gauge"><span id="g-fill"></span></div>
@@ -2745,13 +2746,28 @@ function updateProps(px, pz) {
      the whole list and uploads what is near enough to see. A hundred entries
      is nothing next to the per-cell hashing the rocks do; what costs is the
      colliders, so those stop at a much shorter range than the drawing does. */
-  if (Math.abs(px - TOWN.x) < TOWN.half + 700 && Math.abs(pz - TOWN.z) < TOWN.half + 700) {
+  /* Drawn from far enough away to be findable. At the 700/760 m these started
+     at, the town did not exist on screen until you were almost standing in it:
+     driving south from the spawn it appeared at about z = -800, a kilometre
+     short, so the way you discovered the biggest thing in the world was by
+     nearly hitting it. A town on a flat pan is visible for miles, and the
+     instance caps mean drawing all of it costs no more than drawing half —
+     107 lots over eight kinds is about thirteen each, well inside caps of
+     roughly thirty. */
+  if (Math.abs(px - TOWN.x) < TOWN.half + 2300 && Math.abs(pz - TOWN.z) < TOWN.half + 2300) {
     for (const L of LOTS) {
       const dx = L.x - px, dz = L.z - pz;
       const d2 = dx * dx + dz * dz;
-      if (d2 > 760 * 760) continue;
-      const m = TOWN_SLOTS[L.mi].mesh;
-      const F0 = TOWN_SLOTS[L.mi].foot;
+      if (d2 > 2300 * 2300) continue;
+      /* Past about a kilometre only the skyline is doing any work — a 4 m
+         cottage is a smudge two pixels tall, and drawing all 107 of these from
+         2.3 km tripled the frame cost for it. So the far half of the range is
+         the tall buildings only, which is the same trade the Joshua trees
+         already make inside their 340 m disc. */
+      const slot = TOWN_SLOTS[L.mi];
+      if (d2 > 1250 * 1250 && slot.dim[1] < 8) continue;
+      const m = slot.mesh;
+      const F0 = slot.foot;
       const y = groundUnder(L.x, L.z, F0[0] * L.s, F0[1] * L.s, L.yaw) - 0.06;
       pushInst(m, L.x, y, L.z, L.s, L.yaw, L.tint, L.ys);
       /* A building is a box and the solver only speaks spheres, so the
@@ -2783,7 +2799,7 @@ function updateProps(px, pz) {
                            z: L.z - lx * sn + lz * c, r, kind: HARD, mat: 'rock' });
     }
     const ty = groundUnder(TOWER.x, TOWER.z, 3.4, 3.4, 0) - 0.1;
-    if (Math.hypot(TOWER.x - px, TOWER.z - pz) < 900) {
+    if (Math.hypot(TOWER.x - px, TOWER.z - pz) < 2600) {
       pushInst(MESH.tower, TOWER.x, ty, TOWER.z, 1, 0.4, 1, 1);
       if (Math.hypot(TOWER.x - px, TOWER.z - pz) < 150)
         for (let i = 0; i < 4; i++) {
@@ -5025,7 +5041,8 @@ const hudSpeed = el('speed'), hudAlt = el('t-alt'), hudGrade = el('t-grade'),
       hudSurf = el('t-surf'), hudDist = el('t-dist'), hudFill = el('g-fill'),
       hudTape = el('tape'), hudBearing = el('bearing'), hudSteer = el('steerbar').querySelector('i'),
       hudFps = el('fps'), compassEl = el('compass'),
-      hudDmg = el('t-dmg'), hudHits = el('t-hits'), hudDmgFill = el('d-fill');
+      hudDmg = el('t-dmg'), hudHits = el('t-hits'), hudDmgFill = el('d-fill'),
+      hudPos = el('t-pos');
 const PPD = 2.5;
 (function buildTape() {
   let html = '';
@@ -5060,16 +5077,38 @@ function updateHud(dt) {
   hudDmg.textContent = hull;
   hudDmg.className = hull < 45 ? 'bad' : (hull < 80 ? 'warn' : '');
   hudHits.textContent = crash.hits;
+  hudPos.textContent = Math.round(car.p.x) + ', ' + Math.round(car.p.z);
   hudDmgFill.style.width = (crash.damage * 100) + '%';
-  let best = null, bd = 1e9;
-  for (const s of WRECK_SITES) {
-    const d = Math.hypot(s.x - car.p.x, s.z - car.p.z);
-    if (d < bd) { bd = d; best = s; }
-  }
-  if (best) {
-    const b = ((Math.atan2(-(best.x - car.p.x), best.z - car.p.z) / DEG) + 360) % 360;
-    hudBearing.textContent = 'WRECK ' + (bd / 1000).toFixed(1) + 'KM · ' +
-      String(Math.round(b)).padStart(3, '0') + '°';
+  /* Where to go next. This used to consider only the wrecks, which was fine
+     when they were the only thing out here and actively unhelpful once there
+     was a town: the nearest wreck to the spawn is 284 m away, so the readout
+     pointed at that and never once mentioned the biggest landmark in the
+     world, 2.76 km south. Anything worth driving to is a destination now, and
+     the town is worth more than a wreck — so it wins ties within a wide margin
+     rather than on raw distance, and stops being a destination once you are
+     standing in it. */
+  const bearingTo = (x, z) => String(Math.round(
+    ((Math.atan2(-(x - car.p.x), z - car.p.z) / DEG) + 360) % 360)).padStart(3, '0');
+
+  /* The town is the destination, full stop — not the winner of a contest with
+     the wrecks. Ranking by distance is what hid it in the first place: the
+     nearest wreck to the spawn is 284 m away, so the readout pointed at that
+     and never once mentioned the biggest thing in the world, 2.76 km south.
+     Somebody who cannot find the town does not want to know about a wreck. */
+  if (townAt(car.p.x, car.p.z) < 0.5) {
+    const d = Math.hypot(TOWN.x - car.p.x, TOWN.z - car.p.z);
+    hudBearing.textContent = 'TOWN ' + Math.round(TOWN.x) + ',' + Math.round(TOWN.z) +
+      ' · ' + (d / 1000).toFixed(1) + 'KM · ' + bearingTo(TOWN.x, TOWN.z) + '°';
+  } else {
+    /* inside it, the nearest wreck is the useful thing again */
+    let best = null, bd = 1e9;
+    for (const w of WRECK_SITES) {
+      const d = Math.hypot(w.x - car.p.x, w.z - car.p.z);
+      if (d < bd) { bd = d; best = w; }
+    }
+    hudBearing.textContent = best
+      ? 'TOWN · WRECK ' + (bd / 1000).toFixed(1) + 'KM · ' + bearingTo(best.x, best.z) + '°'
+      : 'TOWN';
   }
 }
 
