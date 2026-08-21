@@ -17,10 +17,11 @@ every load and on every device.
 | Handbrake | HAND pad (landscape only) |
 | Tilt steering | TILT — asks for motion permission on iOS, then steer by tilting |
 | Camera | CAM cycles chase → cockpit → wide |
+| Radio | RADIO cycles the stations: ROAM → THRASH → AM → OFF |
 
 **Keyboard**
 
-`W A S D` or arrows · `Space` handbrake · `R` reset · `C` camera · `F` frame stats
+`W A S D` or arrows · `Space` handbrake · `R` reset · `C` camera · `M` radio · `F` frame stats
 
 ## How it works
 
@@ -116,6 +117,70 @@ warm exponential haze whose colour is sampled from the same sky function the
 sky itself uses, so the horizon dissolves cleanly. ACES tonemap, dithered.
 Everything is procedural — there are no textures in the file.
 
+**Sound** — synthesised, all of it. There is not a byte of recorded audio in
+the file for the same reason there is not a byte of texture: one decent guitar
+loop is several megabytes base64'd into a page that is under a megabyte in
+total, and the whole premise is a single file with no fetches. So the
+soundtrack is generated, which also means it does not repeat, which a loop
+does.
+
+Four buses into a limiter — music, engine, effects, and a convolution send.
+Keeping them apart is what lets the music duck under a crash and the engine sit
+under both. The levels are measured rather than chosen: at unity the engine's
+RMS sat 2.7 dB above the entire music bus, because a drone always beats a mix
+of transients on average level, and the two guitar chains alone put the music
+bus at 2.3 peak. The numbers in the file now are the ones that put master peak
+at 0.62 with nothing clipping and the riff 1.3 dB over the engine.
+
+- **The engine has gears.** Five ratios with hysteresis at the change points.
+  Mapping pitch straight to road speed is what makes a browser car sound like a
+  slot car — the note only ever goes one way — and the drop on a shift is most
+  of what reads as acceleration. Its tone is a firing-harmonic series rather
+  than a sawtooth, weighted heavily towards the low ones, and wheelspin revs it
+  without the truck going anywhere.
+- **The riff is arranged, not looped.** Sixteen slots to the bar, scheduled a
+  third of a second ahead off the game's own frame loop. Four sections from a
+  half-time crawl to a double-kick redline, picked at the bar line from your
+  speed and throttle, stepping one section at a time so it changes gear rather
+  than jump-cutting. Palm muting is a different note rather than a quieter one
+  — fast decay and a closed filter, which is what the side of your hand does to
+  a string — and getting that one distinction right is most of the difference
+  between metal and a synthesiser playing scales.
+- **One amp per side, not one per note.** The distortion and cabinet EQ exist
+  once per channel and every note runs through them, so notes intermodulate the
+  way they do in a real amp. That is what makes a power chord sound like a
+  guitar instead of like two sine waves.
+- **Go airborne and the drums drop out.** Two seconds of hangtime with a beat
+  under it is two seconds; with the floor pulled out from under it, it is the
+  jump. The cymbal comes back on the landing.
+- **The desert answers where there is rock to answer from.** The reverb send
+  follows the bedrock mask, so effects slap back among the buttes and die in
+  open sand.
+- Impacts are typed, because the difference between an oil drum, a boulder and
+  a snapping saguaro is almost entirely spectral: a long metallic ring, a dead
+  thud with a crack on it, a short dry snap with no tail. Tyres are one noise
+  source through two filters, with the skid's Q swung from a hardpack squeal to
+  a sand roar.
+
+You cannot hear any of this from a screenshot, and every way it can be wrong is
+silent to the eye — a scheduler that never fires, a bus left at zero, a mix
+living inside the limiter. `tools/verify-audio.mjs` drives the car through the
+whole speed range with an analyser on the master bus and plots the spectrum
+against time. A riff has visible structure: vertical stripes on the beat, a
+moving fundamental, harmonics stacked above it. A dead one is a flat wash.
+
+**Weather** — a haboob, and it is the one piece of weather this world can have
+for nothing. It needs no particle system, no second pass and no cloud layer,
+because everything it does is already a uniform: the haze is exponential in
+distance, its colour comes from the same `skyColor()` the sky does, and the
+tonemap is exposed. Wind the fog constant up by six, tint the sky to the
+ground's own ochre and pull a quarter stop out of the exposure, and visibility
+closes from 2.1 km to 320 m. The front arrives over about seventeen seconds,
+stands for forty to eighty, and clears the same way; the schedule is hashed off
+a counter rather than random, so a storm is something that happens to the world
+at a time rather than to your session. The wheel-dust emitter runs off the wind
+while it lasts.
+
 **Tyre tracks** — the truck leaves ruts. A single-channel 2048² accumulation
 map is anchored to the world and covers 320 m (0.156 m per texel, so a 0.48 m
 tyre lands across three texels — one is a scratch, three is a rut with
@@ -152,6 +217,13 @@ nominal on average, with no frame-to-frame jump large enough to read as a snap.
 pylon line with sagging wire running beside the road, and three half-buried
 wrecks placed on the flattest ground near their seed points. Without them an
 infinite desert reads as broken rather than vast.
+
+Sixteen of the rocks are authored rather than generated: boulders, gravel,
+outcrops, ridges and plateaus imported from two low-poly desert packs and
+scattered by the same rules as everything else. Their density spans a factor
+of fifty, from 64 pebbles per km² to 1.2 plateaus, which is what turned up a
+bug that had been in the prop scatter since it was written — see **Importing a
+prop** below.
 
 **Things you hit** — every obstacle is approximated as one or more spheres, and
 the body as an oriented box. Box-vs-sphere gives an exact closest point, a
@@ -285,9 +357,18 @@ fallback) that reacts to sustained frame time.
 open index.html          # or serve the directory, any static host works
 ```
 
-`index.html` is ~842 KB, most of it packed geometry: the vehicle, the
-Outdoorsman, the wordmark, and the embedded cover art. Still one file, no build
-step, no runtime fetches.
+`index.html` is ~960 KB, most of it packed geometry: the vehicle, the
+Outdoorsman, the wordmark, sixteen imported rocks and landforms, and the
+embedded cover art. Still one file, no build step, no runtime fetches — and no
+audio files, because there is no recorded audio.
+
+The imported props are gzipped and inflated at boot by the browser's own
+`DecompressionStream`, the same way the wordmark already was. Uncompressed they
+would be 250 KB of base64; they are 77 KB, which is what made importing sixteen
+of them affordable rather than four. A prop whose blob is gzipped registers with
+no mesh and is filled in asynchronously — nothing downstream needed changing,
+because everything already had to cope with a prop drawing no instances this
+frame.
 
 It also installs to an iPhone home screen. Safari's Share → Add to Home Screen
 picks up the `apple-touch-icon` and the `apple-mobile-web-app-*` meta tags, and
@@ -350,8 +431,39 @@ silently as an ambient-only grey cut-out; and the mean albedo is reported,
 because the prop shader adds a flat sky term that a dark mesh cannot overcome
 and baked photogrammetry is usually dark enough to drift cool.
 
-`tools/make-test-prop.mjs` writes a fixture — deliberately with its normals the
-wrong way round, so the guard has something to catch.
+`.fbx` goes in directly — `tools/parse-fbx.mjs` reads binary FBX 6100 through
+7700, follows the file's own texture reference, decodes the PNG and samples it
+through the UVs. That is the bake `assets/README.md` used to describe as one
+Blender step, done from the format spec instead. Both desert packs went in that
+way, and a pack whose whole texture is one flat colour is weathered at import
+so it does not arrive as painted plastic.
+
+Four things the prop path grew while sixteen of them were being imported, each
+a real defect rather than a polish pass:
+
+- **A density below one per cell placed nothing, ever.** The scatter took
+  `floor(seed × perCell × 2)`, and a landmark at 1.4 per km² is 0.05 per 190 m
+  cell — so the floor was zero in every cell in the world, and the prop was
+  authored, packed, uploaded, and then never placed. Rolling the fractional part
+  off a second hash makes the delivered mean the authored density at every
+  scale, rather than only above about 28 per km².
+- **Wide props were sited off a 3 m sample.** A 28 m plateau placed on what is
+  locally flat hangs over the dune ten metres away, so the ground test uses the
+  prop's own footprint radius now, and it is bedded in by a fraction of its
+  height rather than balanced on the surface.
+- **The collision broad phase rejected at a fixed 8 m box**, which silently
+  skipped any collider bigger than that — exactly the ones an imported landmark
+  carries. It grows with the sphere now.
+- **Sphere fitting has two modes:** a stack up the vertical axis for anything
+  roughly as wide as it is tall, and a square-celled grid over the footprint for
+  anything wider, trimmed to budget by greedy set cover rather than by radius.
+  The numbers are in `assets/README.md`.
+
+`tools/verify-prop.mjs` renders every imported prop as a contact sheet with its
+colliders drawn over it, and fails on an inverted winding, a bake too dark for
+the sky term, a hull holding less than a quarter of its mesh, or one standing
+proud of it. `tools/make-test-prop.mjs` writes a fixture — deliberately with its
+normals the wrong way round, so the guard has something to catch.
 
 ## Importing a character
 
@@ -369,6 +481,21 @@ spec rather than shared with the engine's, skins on the CPU and rasterises it
 into a 2D canvas — so if the two agree the format is unambiguous, and a wrecked
 silhouette or a bad bake shows up before any of it reaches a shader.
 
+## Importing a soundtrack
+
+The radio's two riff stations are generated. A recorded track can go on the dial
+beside them:
+
+```
+node tools/import-audio.mjs assets/track.ogg --name=doom --label="DOOM FM"
+node tools/verify-audio.mjs --station=4        # check it decodes, and plot it
+```
+
+It is base64'd into `index.html` and decoded once, on the first time you tune to
+it. The 33% base64 tax on top of a few megabytes of audio is the whole reason
+the default soundtrack is synthesised, and the importer says so if you hand it
+something that would outweigh the rest of the game.
+
 ## Importing the wordmark
 
 ```
@@ -384,14 +511,29 @@ engine can stagger them.
 
 ## Easter eggs
 
-Two, both at fixed coordinates, both findable by driving:
+Five. Nothing is unlocked from a menu.
 
 - a stack of drums parked on the road shoulder about 800 m north of the spawn
 - somebody left a hat on a cactus, out past the first wreck
+- a wall of cabinets standing in the sand, miles from anything, still plugged
+  into nothing. Get within about seventy metres and the radio finds another
+  gear — and turns itself on if you had it off
+- the other thing out here that nobody built. It is 1 : 4 : 9, the ratio being
+  the entire joke, and it hums: three detuned voices a fifth and a fourth apart,
+  which is not a chord anybody wrote down
+- hold 88 mph
+
+Both of the new sites are levelled the way the wrecks are — nudged to the
+flattest ground within a short walk of their seed point — and stood on the
+ground under their *footprint* rather than under their centre, because anything
+with a flat base sited off one sample floats on its downhill edge.
+
+And there is a code. It is the one you think it is, and it puts the truck on the
+moon, which on a map made mostly of ramps is the only cheat worth having.
 
 ## Not done yet
 
-Other vehicles, weather, and a real soft-body sand response. Tyre tracks are
+Other vehicles, night, and a real soft-body sand response. Tyre tracks are
 shading only — the ruts do not change `heightAt`, so they have no effect on the
 physics. The `road` is a colour-and-grade corridor rather than a
 decal, so its edges get blocky at long range.
