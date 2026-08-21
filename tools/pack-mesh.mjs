@@ -1,7 +1,17 @@
 /* Shared mesh reduction and SKM1 packing, used by both importers.
    SKM1 is int16 positions x a scale, int8 normals and uint8 colour, which
    decodes to exactly the interleaved layout MB.upload() already produces — so
-   the renderer needs no special case for an imported mesh. No dependencies. */
+   the renderer needs no special case for an imported mesh.
+
+   pack(tris, {gzip:true}) deflates the blob before base64. SKM1 is three
+   whole vertices per triangle with the face normal written out three times
+   and, on a mesh with a handful of materials, the same colour on nearly every
+   one — which is to say most of it is repetition that a dictionary coder eats.
+   The browser inflates it with its own DecompressionStream, so this costs no
+   code in the engine beyond noticing the gzip magic. Only worth it on a blob
+   big enough that base64's 33% expansion is not the dominant term.
+   Node's zlib is the only import here; nothing else has dependencies. */
+import { gzipSync } from 'node:zlib';
 
 /* -------------------------------------------------------------- reduce -- */
 export function decimate(tris, budget) {
@@ -35,7 +45,7 @@ export function decimate(tris, budget) {
 }
 
 /* --------------------------------------------------------------- pack --- */
-export function pack(tris) {
+export function pack(tris, opts = {}) {
   let m = 0;
   for (const t of tris) for (const p of t.p) for (const v of p) m = Math.max(m, Math.abs(v));
   const s = m / 32000 || 1e-6;
@@ -62,5 +72,5 @@ export function pack(tris) {
       o += 12;
     }
   }
-  return buf.toString('base64');
+  return (opts.gzip ? gzipSync(buf, { level: 9 }) : buf).toString('base64');
 }

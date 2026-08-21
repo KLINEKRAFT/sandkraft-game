@@ -87,7 +87,7 @@ const minMax = (arr, n) => {
 };
 const pmm = minMax(pos, 3);
 const json = Buffer.from(JSON.stringify({
-  asset: { version: '2.0', generator: 'sandkraft make-test-prop' },
+  asset: { version: '2.0', generator: 'bronco-roam make-test-prop' },
   scene: 0,
   scenes: [{ nodes: [0] }],
   nodes: [{ mesh: 0, name: 'TestProp' }],
