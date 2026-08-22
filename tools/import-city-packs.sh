@@ -59,6 +59,11 @@ node tools/import-prop.mjs "$V/Hatchback Car_2.fbx" --name=carHatch --tris=330 $
 node tools/import-prop.mjs "$V/N_Suv_14.fbx"        --name=carSuv   --tris=330 $T
 node tools/import-prop.mjs "$V/Pick Up_3.fbx"       --name=carPick  --tris=330 $T
 node tools/import-prop.mjs "$V/N Van_9.fbx"         --name=carVan   --tris=330 $T
+# ---- three more, for the kerb ----------------------------------------------
+# Parked cars draw from the same pool as the moving ones, so these widen both.
+node tools/import-prop.mjs "$V/Police Car N_3.fbx"  --name=carPolice  --tris=330 $T
+node tools/import-prop.mjs "$V/Classic Car_1.fbx"   --name=carClassic --tris=330 $T
+node tools/import-prop.mjs "$V/N_Muscle Car_1.fbx"  --name=carMuscle  --tris=330 $T
 
 echo
 echo "now: node tools/verify-prop.mjs   — and LOOK at props.png"
