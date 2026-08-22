@@ -266,6 +266,40 @@ than the player's truck and look worse, and the moment you touch one it stops
 being driven and becomes a free body, which is the only moment anybody is
 looking closely.
 
+They keep a gap. Two cars share a lane when they agree on axis, line and
+direction, and then `along` alone says who is in front — which is the whole
+benefit of driving the grid analytically rather than steering one. It is O(n²)
+over fourteen, so 196 comparisons, cheaper than the distance test it replaces
+would have been. Wrecks are not in it: a car knocked free stops maintaining
+`along`, so living traffic will drive through a fresh one. The window is small —
+you are standing next to anything you just flattened, and it is swept up at
+260 m — and closing it properly means giving the driven cars a reason to steer,
+which is a bigger job than this one.
+
+**The kerb** — the town had eight kinds of building, moving traffic and an empty
+kerb, which is the one thing that reads as a film set rather than a place. 228
+parking slots, laid out like the lots: deterministic, computed once, in the same
+arrangement every time you drive back in. They go into the same list the moving
+cars live in with `park` set, so every line of collision, crush and drawing code
+already written applies to them without a word changed — which means you can
+flatten a whole street of them, and the town remembers. A crushed slot is
+recorded by id the way a snapped saguaro is, so driving away and coming back
+does not quietly restore the bodywork. Measured: crushed to 0.42, driven 5 km
+away and back, still 0.42.
+
+Eight bodies now — sedan, hatchback, SUV, pickup, van, police, classic and
+muscle. The moving fleet draws from the first five; the kerb draws on all eight,
+because a police car and a couple of old beaters parked outside the shops say
+more about a place than another sedan going past.
+
+Filling the kerb put 189 cars in the list, and `driveSurface()` was iterating
+all of them — inside the suspension's Newton solve, four wheels, a few
+iterations each, every substep. The reject test is cheap and doing it a few
+million times a second is not, so what that loop walks is now a short list
+gathered once a frame: everything within 14 m, which in practice is nought to
+three cars. `driveSurface` costs 0.28 ms per second of wall clock with 189
+vehicles, against 0.30 with 14 before.
+
 Every dimension the collision maths needs is read off the import rather than
 kept in a table: a sedan is 4.8 m long and a pickup 6.2, and the code was
 originally written against one hardcoded set of half-extents, which crushed a
@@ -647,8 +681,9 @@ moon, which on a map made mostly of ramps is the only cheat worth having.
 ## Not done yet
 
 Night, a real soft-body sand response, and street furniture — the town has
-buildings and traffic but no road surface geometry, kerbs or signage yet; the
-Quaternius modular street pack is the obvious next import. Building colliders are a 3x2 of spheres
+buildings, moving traffic and parked cars, but no road surface geometry, kerbs
+or signage; the Quaternius modular street pack is the obvious next import.
+Living traffic also drives through wrecks, for the reason above. Building colliders are a 3x2 of spheres
 fitted so their overhang is identically zero, which leaves a gap instead: about
 1.2 m at a corner, 1.6 on the shed. A sphere cannot cover a box corner without
 overhanging its faces, and clipping a corner is the right way round to be wrong
